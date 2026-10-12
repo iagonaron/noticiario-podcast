@@ -18,8 +18,11 @@ de NotebookLM. Funciona solo, con el ordenador apagado y con servicios gratuitos
    A Coruña, cambio de hora), agenda de hoy y de mañana y el tiempo en dos frases.
 4. **Guion**: Gemini (plan gratuito) escribe la conversación: todas las noticias de cada
    pestaña, explicadas fácil y con desenfado. Sin spoilers del Madrid.
-5. **Voces**: Gemini en modo conversación (dos voces en la misma toma). Si Gemini falla, el
-   episodio entero se hace con Edge (voces de Microsoft), para que llegue igual.
+5. **Voces**: Gemini en modo conversación (dos voces en la misma toma), en unas 5 tandas largas.
+   Hay cuatro modelos de voz en cadena: si uno se queda sin cupo diario (el plan gratuito da unas
+   10 peticiones al día por modelo y se renueva a las 2:00 de Madrid) o falla, sigue el siguiente.
+   Si ninguno puede, lo que falte se hace con Edge (voces de Microsoft; desde GitHub suele estar
+   bloqueado) o con Piper, una voz sin conexión más robótica, para que el episodio llegue siempre.
 6. **Montaje**: sintonía de entrada y cierre (de la carpeta `musica` de Dropbox), volumen de
    pódcast y MP3.
 7. **Dropbox**: sustituye `Noticiario de hoy.mp3` y `Guion de hoy.md` en la carpeta de la app.
@@ -54,6 +57,8 @@ Los registros de GitHub solo muestran datos técnicos.
 - **Probar ahora**: pestaña Actions → «Noticiario Podcast» → *Run workflow*.
 - **Comprobar un episodio**: Actions → «Comprobar episodio» → *Run workflow* (lo transcribe y
   deja «Comprobación.txt» en Dropbox).
+- **Qué pasó en cada ejecución**: «Diagnóstico.txt» en la carpeta del pódcast en Dropbox (fuentes,
+  tiempos, modelos de voz usados y avisos).
 - **Pausar**: Actions → «Noticiario Podcast» → `···` → *Disable workflow*.
 - **Quitarlo del todo**: borrar este repositorio y, en Dropbox, la app «Noticiario Podcast»
   (dropbox.com/account/connected_apps). Nada más depende de él.
