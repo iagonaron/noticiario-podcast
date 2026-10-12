@@ -1,0 +1,76 @@
+# El robot del Noticiario Podcast.
+# GitHub programa en hora universal (UTC), así que salta a tres horas y el propio robot
+# decide (podcast/toca.py): genera a las 7:20 de Madrid, en verano y en invierno, y si
+# esa primera vez falla o GitHub se la salta, la siguiente sirve de reintento.
+#
+# Para pausarlo: pestaña Actions → «Noticiario Podcast» → «···» → Disable workflow.
+# Para probarlo cuando quieras: Actions → «Noticiario Podcast» → Run workflow.
+
+name: Noticiario Podcast
+
+on:
+  schedule:
+    - cron: "20 5 * * *"   # 07:20 en verano (UTC+2)
+    - cron: "20 6 * * *"   # 07:20 en invierno (UTC+1) · en verano, reintento de las 08:20
+    - cron: "20 7 * * *"   # en invierno, reintento de las 08:20
+  workflow_dispatch:
+
+permissions:
+  contents: write          # solo para el «latido» mensual que mantiene viva la programación
+
+concurrency:
+  group: noticiario-podcast
+  cancel-in-progress: false
+
+jobs:
+  podcast:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      TZ: Europe/Madrid
+      PYTHONUNBUFFERED: "1"
+      FORZAR: ${{ github.event_name == 'workflow_dispatch' && 'si' || 'no' }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      DROPBOX_APP_KEY: ${{ secrets.DROPBOX_APP_KEY }}
+      DROPBOX_APP_SECRET: ${{ secrets.DROPBOX_APP_SECRET }}
+      DROPBOX_REFRESH_TOKEN: ${{ secrets.DROPBOX_REFRESH_TOKEN }}
+      CALENDARIOS_ICS: ${{ secrets.CALENDARIOS_ICS }}
+      VOZ_A: ${{ vars.VOZ_A }}
+      VOZ_B: ${{ vars.VOZ_B }}
+      MOTOR_VOZ: ${{ vars.MOTOR_VOZ }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: ¿Toca generar ahora?
+        id: toca
+        run: python3 -m podcast.toca
+
+      - uses: actions/setup-python@v5
+        if: steps.toca.outputs.toca == 'si'
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Instalar lo necesario
+        if: steps.toca.outputs.toca == 'si'
+        run: |
+          pip install -r requirements.txt
+          python -m playwright install --with-deps chromium
+          command -v ffmpeg || (sudo apt-get update -y && sudo apt-get install -y ffmpeg)
+
+      - name: Generar el pódcast y subirlo a Dropbox
+        if: steps.toca.outputs.toca == 'si'
+        run: python -m podcast.main
+
+      - name: Latido mensual (GitHub apaga las tareas programadas de repos sin actividad en 60 días)
+        if: always()
+        run: |
+          ultimo=$(git log -1 --format=%ct)
+          if [ $(( $(date +%s) - ultimo )) -gt $(( 40 * 86400 )) ]; then
+            date -u +"%Y-%m-%d %H:%M UTC" > latido.txt
+            git config user.name "noticiario-podcast"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add latido.txt
+            git commit -m "Latido mensual: mantiene activa la programación"
+            git push
+          fi

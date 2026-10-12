@@ -1,0 +1,38 @@
+# Paso único: autorizar al robot a escribir en su carpeta de Dropbox.
+# 1) Abre el enlace de autorización de tu app de Dropbox y pulsa «Permitir».
+# 2) Aquí: Run workflow → pega el código → Run workflow.
+# El permiso permanente se guarda CIFRADO (con tu App secret) en config/dropbox.token.enc.
+
+name: Configurar Dropbox
+
+on:
+  workflow_dispatch:
+    inputs:
+      codigo:
+        description: "Código que te da Dropbox al pulsar «Permitir»"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  configurar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cambiar el código por un permiso permanente (cifrado) y probar la carpeta
+        env:
+          DROPBOX_APP_KEY: ${{ secrets.DROPBOX_APP_KEY }}
+          DROPBOX_APP_SECRET: ${{ secrets.DROPBOX_APP_SECRET }}
+          CODIGO: ${{ inputs.codigo }}
+        run: python3 -m podcast.configurar_dropbox
+
+      - name: Guardar el permiso cifrado en el repositorio
+        run: |
+          git config user.name "noticiario-podcast"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add config/dropbox.token.enc
+          git commit -m "Permiso de Dropbox (cifrado)" || echo "Sin cambios"
+          git push
