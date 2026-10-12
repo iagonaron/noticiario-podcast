@@ -1,9 +1,10 @@
-"""Pone voz al guion.
+"""Pone voz al guion, como una conversación entre dos personas.
 
-1. Gemini (plan gratuito): se busca el primer modelo de voz que responda y se usa
-   ese mismo para todo el episodio, para que las voces no cambien a mitad.
-2. Si Gemini falla en cualquier trozo (cupo agotado, error, audio cortado), el episodio
-   ENTERO se hace con Edge (voces de Microsoft), para que suene coherente. El pódcast llega igual.
+1. Gemini (plan gratuito), en modo conversación: cada tanda de turnos seguidos se genera de una
+   vez con las dos voces, así los cambios de turno suenan naturales (como en NotebookLM).
+   Se elige el primer modelo de voz que responda y se usa el mismo para todo el episodio.
+2. Si Gemini falla en cualquier tanda, el episodio ENTERO se hace con Edge (voces de Microsoft),
+   turno a turno, para que suene coherente. El pódcast llega igual.
 """
 import asyncio
 import base64
@@ -41,8 +42,7 @@ def duracion_wav(datos):
         return w.getnframes() / float(w.getframerate())
 
 
-def trocear(texto, maximo=config.VOZ_MAX_CARACTERES):
-    """Parte el texto en trozos de como mucho `maximo` caracteres, por frases."""
+def _frases(texto, maximo):
     if len(texto) <= maximo:
         return [texto]
     frases = re.split(r"(?<=[.!?…])\s+", texto)
@@ -56,6 +56,21 @@ def trocear(texto, maximo=config.VOZ_MAX_CARACTERES):
     if actual:
         trozos.append(actual)
     return trozos
+
+
+def tandas(segmentos, maximo=config.VOZ_MAX_CARACTERES):
+    """Agrupa turnos seguidos del mismo bloque en tandas de como mucho `maximo` caracteres."""
+    salida = []
+    for s in segmentos:
+        for t in _frases(s["texto"], maximo):
+            turno = {"voz": s["voz"], "texto": t}
+            ultima = salida[-1] if salida else None
+            if (ultima and ultima["bloque"] == s["bloque"]
+                    and sum(len(x["texto"]) for x in ultima["turnos"]) + len(t) <= maximo):
+                ultima["turnos"].append(turno)
+            else:
+                salida.append({"bloque": s["bloque"], "turnos": [turno]})
+    return salida
 
 
 def _buscar_audio(obj):
@@ -84,28 +99,35 @@ def _a_wav(mime, datos_b64):
     datos = base64.b64decode(datos_b64)
     if datos[:4] == b"RIFF":
         return datos
-    rate = 24000
     m = re.search(r"rate=(\d+)", mime or "")
-    if m:
-        rate = int(m.group(1))
-    return pcm_a_wav(datos, rate)
+    return pcm_a_wav(datos, int(m.group(1)) if m else 24000)
 
 
 # ---------------------------------------------------------------- Gemini
+def _id(clave):
+    """Identificador sin tildes del locutor (Lucia, Martin) para el modo conversación."""
+    return util.sin_tildes(config.LOCUTORES[clave]["nombre"]).replace(" ", "")
+
+
 def _cabeceras():
     return {"x-goog-api-key": os.environ.get("GEMINI_API_KEY", ""), "Content-Type": "application/json"}
 
 
-def _gemini_interactions(modelo, texto, voz, estilo):
-    cuerpo = {
-        "model": modelo,
-        "input": [{"type": "user_input", "content": [{
-            "type": "text", "text": texto,
-            "annotations": [{"type": "speech_metadata", "style": estilo}],
-        }]}],
-        "response_format": {"type": "audio"},
-        "generation_config": {"speech_config": [{"voice": voz}]},
-    }
+def _gemini_interactions(modelo, tanda):
+    voces = sorted({t["voz"] for t in tanda["turnos"]})
+    contenido = []
+    for t in tanda["turnos"]:
+        meta = {"type": "speech_metadata", "style": config.ESTILO_VOZ}
+        if len(voces) > 1:
+            meta["speaker"] = _id(t["voz"])
+        contenido.append({"type": "text", "text": t["texto"], "annotations": [meta]})
+    if len(voces) > 1:
+        speech = {"mode": "conversational",
+                  "speakers": [{"speaker": _id(v), "voice": config.LOCUTORES[v]["gemini"]} for v in voces]}
+    else:
+        speech = [{"voice": config.LOCUTORES[voces[0]]["gemini"]}]
+    cuerpo = {"model": modelo, "input": [{"type": "user_input", "content": contenido}],
+              "response_format": {"type": "audio"}, "generation_config": {"speech_config": speech}}
     r = requests.post(URL_INTERACTIONS, json=cuerpo, headers=_cabeceras(), timeout=300)
     if r.status_code != 200:
         raise FalloVoz(f"{modelo} (interactions) HTTP {r.status_code}: {r.text[:300]}")
@@ -115,14 +137,19 @@ def _gemini_interactions(modelo, texto, voz, estilo):
     return _a_wav(mime, datos)
 
 
-def _gemini_generate(modelo, texto, voz, estilo):
-    cuerpo = {
-        "contents": [{"parts": [{"text": f"{estilo}\n\nLee en voz alta, tal cual, este texto:\n\n{texto}"}]}],
-        "generationConfig": {
-            "responseModalities": ["AUDIO"],
-            "speechConfig": {"voiceConfig": {"prebuiltVoiceConfig": {"voiceName": voz}}},
-        },
-    }
+def _gemini_generate(modelo, tanda):
+    voces = sorted({t["voz"] for t in tanda["turnos"]})
+    if len(voces) > 1:
+        texto = (f"{config.ESTILO_VOZ}\n\nLee esta conversación entre {_id('A')} y {_id('B')}, tal cual:\n\n"
+                 + "\n".join(f"{_id(t['voz'])}: {t['texto']}" for t in tanda["turnos"]))
+        speech = {"multiSpeakerVoiceConfig": {"speakerVoiceConfigs": [
+            {"speaker": _id(v), "voiceConfig": {"prebuiltVoiceConfig": {"voiceName": config.LOCUTORES[v]["gemini"]}}}
+            for v in voces]}}
+    else:
+        texto = f"{config.ESTILO_VOZ}\n\nLee en voz alta, tal cual:\n\n" + " ".join(t["texto"] for t in tanda["turnos"])
+        speech = {"voiceConfig": {"prebuiltVoiceConfig": {"voiceName": config.LOCUTORES[voces[0]]["gemini"]}}}
+    cuerpo = {"contents": [{"parts": [{"text": texto}]}],
+              "generationConfig": {"responseModalities": ["AUDIO"], "speechConfig": speech}}
     r = requests.post(URL_GENERATE.format(modelo=modelo), json=cuerpo, headers=_cabeceras(), timeout=300)
     if r.status_code != 200:
         raise FalloVoz(f"{modelo} (generate) HTTP {r.status_code}: {r.text[:300]}")
@@ -132,15 +159,15 @@ def _gemini_generate(modelo, texto, voz, estilo):
     return _a_wav(mime, datos)
 
 
-def _llamada_gemini(via, modelo, texto, locutor):
-    f = _gemini_interactions if via == "interactions" else _gemini_generate
-    return f(modelo, texto, locutor["gemini"], locutor["estilo"])
+def _llamada(via, modelo, tanda):
+    return (_gemini_interactions if via == "interactions" else _gemini_generate)(modelo, tanda)
 
 
-def _audio_razonable(wav, texto):
+def _razonable(wav, tanda):
     """¿Dura lo que debería? (detecta audios cortados o con divagaciones)."""
     seg = duracion_wav(wav)
-    esperado = max(1.5, util.palabras(texto) / 2.6)      # ~156 palabras por minuto
+    palabras = sum(util.palabras(t["texto"]) for t in tanda["turnos"])
+    esperado = max(1.5, palabras / 2.8)      # ~170 palabras por minuto en conversación
     return 0.5 * esperado <= seg <= 2.0 * esperado + 3, seg, esperado
 
 
@@ -149,94 +176,91 @@ def _espera(msg):
     return min(75, int(m.group(1)) + 2) if m else 30
 
 
-def sintetizar_gemini(trozos):
-    """trozos: [(texto, clave_locutor)] → lista de WAV (bytes). Lanza FalloVoz si no puede con todos."""
+def sintetizar_gemini(lista):
     if not os.environ.get("GEMINI_API_KEY"):
         raise FalloVoz("Falta el secreto GEMINI_API_KEY")
-    elegido, errores = None, []
-    # 1) elegir el primer modelo que funcione, con el primer trozo
-    texto0, loc0 = trozos[0]
+    # se prueba el modelo con la primera tanda que tenga las dos voces (así se valida el modo conversación)
+    primera = next((i for i, t in enumerate(lista) if len({x["voz"] for x in t["turnos"]}) > 1), 0)
+    elegido, errores, audios = None, [], [None] * len(lista)
     for via, modelo in config.MODELOS_VOZ:
         try:
-            wav = _llamada_gemini(via, modelo, texto0, config.LOCUTORES[loc0])
-            ok, seg, esp = _audio_razonable(wav, texto0)
+            wav = _llamada(via, modelo, lista[primera])
+            ok, seg, esp = _razonable(wav, lista[primera])
             if not ok:
                 raise FalloVoz(f"{modelo}: duración rara ({seg:.0f}s, esperaba ~{esp:.0f}s)")
-            elegido = (via, modelo)
-            salida = [wav]
+            elegido, audios[primera] = (via, modelo), wav
             util.log(f"Voz Gemini: {modelo} ({via})")
             break
         except Exception as e:
             errores.append(str(e)[:300])
     if not elegido:
         raise FalloVoz("Ningún modelo de voz de Gemini respondió: " + " | ".join(errores))
-    # 2) el resto de trozos, con el mismo modelo
-    for n, (texto, loc) in enumerate(trozos[1:], 2):
+    for n, tanda in enumerate(lista):
+        if audios[n] is not None:
+            continue
         ultimo = None
         for intento in range(4):
             try:
-                time.sleep(3)
-                wav = _llamada_gemini(*elegido, texto, config.LOCUTORES[loc])
-                ok, seg, esp = _audio_razonable(wav, texto)
+                time.sleep(2)
+                wav = _llamada(*elegido, tanda)
+                ok, seg, esp = _razonable(wav, tanda)
                 if not ok:
-                    raise FalloVoz(f"duración rara en el trozo {n} ({seg:.0f}s, esperaba ~{esp:.0f}s)")
-                salida.append(wav)
+                    raise FalloVoz(f"duración rara en la tanda {n + 1} ({seg:.0f}s, esperaba ~{esp:.0f}s)")
+                audios[n] = wav
                 break
             except Exception as e:
                 ultimo = str(e)
-                if "429" in ultimo or "RESOURCE_EXHAUSTED" in ultimo:
-                    time.sleep(_espera(ultimo))
-                else:
-                    time.sleep(5 * (intento + 1))
+                time.sleep(_espera(ultimo) if ("429" in ultimo or "RESOURCE_EXHAUSTED" in ultimo) else 5 * (intento + 1))
         else:
-            raise FalloVoz(f"Trozo {n} de {len(trozos)}: {ultimo[:300] if ultimo else 'sin respuesta'}")
-    return salida, f"Gemini · {elegido[1]}"
+            raise FalloVoz(f"Tanda {n + 1} de {len(lista)}: {ultimo[:300] if ultimo else 'sin respuesta'}")
+    return audios, f"Gemini · {elegido[1]}"
 
 
 # ---------------------------------------------------------------- Edge
 async def _edge_uno(texto, voz, ruta):
     import edge_tts
-    com = edge_tts.Communicate(texto, voz, rate=config.EDGE_VELOCIDAD)
-    await com.save(ruta)
+    await edge_tts.Communicate(texto, voz, rate=config.EDGE_VELOCIDAD).save(ruta)
 
 
-def sintetizar_edge(trozos, carpeta):
+def sintetizar_edge(lista, carpeta):
     from pydub import AudioSegment
-    salida = []
-    for n, (texto, loc) in enumerate(trozos, 1):
-        ruta = os.path.join(carpeta, f"edge_{n:02d}.mp3")
-        ultimo = None
-        for intento in range(3):
-            try:
-                asyncio.run(_edge_uno(texto, config.LOCUTORES[loc]["edge"], ruta))
-                seg = AudioSegment.from_file(ruta)
-                b = io.BytesIO()
-                seg.set_channels(1).set_frame_rate(24000).export(b, format="wav")
-                salida.append(b.getvalue())
-                break
-            except Exception as e:
-                ultimo = e
-                time.sleep(4 * (intento + 1))
-        else:
-            raise FalloVoz(f"Edge falló en el trozo {n}: {ultimo}")
-    return salida, "Edge · " + " + ".join(sorted({config.LOCUTORES[l]["edge"] for _, l in trozos}))
+    audios = []
+    for n, tanda in enumerate(lista, 1):
+        total = None
+        for k, t in enumerate(tanda["turnos"], 1):
+            ruta = os.path.join(carpeta, f"edge_{n:02d}_{k:02d}.mp3")
+            for intento in range(3):
+                try:
+                    asyncio.run(_edge_uno(t["texto"], config.LOCUTORES[t["voz"]]["edge"], ruta))
+                    seg = AudioSegment.from_file(ruta).set_channels(1).set_frame_rate(24000)
+                    break
+                except Exception as e:
+                    if intento == 2:
+                        raise FalloVoz(f"Edge falló en la tanda {n}: {e}")
+                    time.sleep(4 * (intento + 1))
+            total = seg if total is None else total + AudioSegment.silent(duration=220, frame_rate=24000) + seg
+        b = io.BytesIO()
+        total.export(b, format="wav")
+        audios.append(b.getvalue())
+    return audios, "Edge · " + " + ".join(sorted({v["edge"] for v in config.LOCUTORES.values()}))
 
 
 # ---------------------------------------------------------------- todo junto
 def sintetizar(segmentos, carpeta):
-    """Devuelve (audios, motor, avisos). `audios` va en paralelo con los trozos devueltos."""
-    trozos, indice = [], []
-    for i, s in enumerate(segmentos):
-        for t in trocear(s["texto"]):
-            trozos.append((t, s["voz"]))
-            indice.append(i)
+    """Devuelve (unidades, motor, avisos). Cada unidad: {'bloque', 'wav', 'palabras', 'segundos'}."""
+    lista = tandas(segmentos)
     avisos = []
+    audios = motor = None
     if config.MOTOR_VOZ != "edge":
         try:
-            audios, motor = sintetizar_gemini(trozos)
-            return audios, indice, motor, avisos
+            audios, motor = sintetizar_gemini(lista)
         except Exception as e:
             avisos.append(f"Voz de Gemini no disponible, uso Edge para todo el episodio: {str(e)[:400]}")
             util.log(avisos[-1])
-    audios, motor = sintetizar_edge(trozos, carpeta)
-    return audios, indice, motor, avisos
+    if audios is None:
+        audios, motor = sintetizar_edge(lista, carpeta)
+    unidades = [{"bloque": t["bloque"], "wav": a, "segundos": duracion_wav(a),
+                 "palabras": sum(util.palabras(x["texto"]) for x in t["turnos"]),
+                 "voces": "".join(sorted({x["voz"] for x in t["turnos"]}))}
+                for t, a in zip(lista, audios)]
+    return unidades, motor, avisos

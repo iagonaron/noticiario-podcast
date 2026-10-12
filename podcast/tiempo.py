@@ -415,3 +415,51 @@ def texto_plantilla(r):
         t.append(f"Atención: aviso {a.get('level', '')} por {a.get('phenomenon', '')}"
                  + (f" {a.get('timeframe')}" if a.get("timeframe") else "") + ".")
     return " ".join(t)
+
+
+# ---------------------------------------------------------------- versión breve (la que se usa)
+PARTES_DIA = (("por la mañana", range(8, 14)), ("por la tarde", range(14, 21)), ("por la noche", range(21, 24)))
+
+
+def _cuando(partes):
+    if len(partes) == 3:
+        return "todo el día"
+    return util.lista_hablada(partes)
+
+
+def texto_breve(horas, r):
+    """El tiempo en dos o tres frases: cielo y temperaturas, si llueve o no, si hace falta crema."""
+    frases = []
+    cielo = _cielo(horas, range(8, 21))
+    tp = r.get("temperatura")
+    if cielo and tp:
+        frases.append(f"El tiempo: {cielo}, entre {tp['minima']} y {tp['maxima']} grados.")
+    elif tp:
+        frases.append(f"El tiempo: entre {tp['minima']} y {tp['maxima']} grados.")
+    llueve, quiza = [], []
+    for nombre, rango in PARTES_DIA:
+        sub = [o for o in horas if o["h"] in rango]
+        pmax = max([(o.get("prob") or 0) for o in sub] or [0])
+        mm = sum((o.get("lluvia") or 0) for o in sub)
+        if pmax >= 50 or mm >= 0.5:
+            llueve.append(nombre)
+        elif pmax >= 30:
+            quiza.append(nombre)
+    if llueve:
+        frases.append(f"Va a llover {_cuando(llueve)}, así que paraguas."
+                      + (f" Y puede caer algo {_cuando(quiza)}." if quiza else ""))
+    elif quiza:
+        frases.append(f"No se espera mucha lluvia, aunque puede caer algo {_cuando(quiza)}.")
+    else:
+        frases.append("No va a llover.")
+    uv = r.get("uv")
+    if uv and uv.get("maximo", 0) >= config.UV_PROTECCION and uv.get("proteccion_solar_desde") is not None:
+        a, b = uv["proteccion_solar_desde"], uv["proteccion_solar_hasta"]
+        na, nb = util.NUMEROS.get(a % 12 or 12), util.NUMEROS.get(b % 12 or 12)
+        frases.append(f"Crema, sí: entre la{'s' if (a % 12 or 12) != 1 else ''} {na} y la{'s' if (b % 12 or 12) != 1 else ''} {nb} pega fuerte el sol.")
+    else:
+        frases.append("Crema, hoy no hace falta.")
+    for a in (r.get("avisos_aemet") or [])[:2]:
+        if a.get("phenomenon"):
+            frases.append(f"Ojo, que hay aviso {a.get('level', '')} por {a['phenomenon']}.")
+    return " ".join(frases)

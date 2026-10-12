@@ -28,8 +28,8 @@ PROB_LLUVIA_FRANJA = 40     # % a partir del cual una hora cuenta como «puede l
 UV_PROTECCION = 3           # índice UV a partir del cual se recomienda protección solar
 
 # ---------------------------------------------------------------- guion
-PALABRAS_MIN = 1350          # sin contar la agenda
-PALABRAS_MAX = 1800
+PALABRAS_MIN = 1800          # parte conversada (sin lo rápido del principio): 12-15 min en total
+PALABRAS_MAX = 2300
 TEXTO_MAX_NOTICIA = 1800     # caracteres de cada noticia que se le pasan al guionista
 
 MODELOS_TEXTO = [m.strip() for m in os.environ.get(
@@ -38,23 +38,23 @@ MODELOS_TEXTO = [m.strip() for m in os.environ.get(
 ).split(",") if m.strip()]
 
 # ---------------------------------------------------------------- voces
-# A abre el programa; los bloques se reparten alternando A y B.
+# Dos presentadores que conversan (estilo NotebookLM). A abre el programa.
 LOCUTORES = {
     "A": {
         "nombre": os.environ.get("NOMBRE_A") or "Lucía",
         "gemini": os.environ.get("VOZ_A") or "Kore",
         "edge": os.environ.get("EDGE_A") or "es-ES-ElviraNeural",
-        "estilo": ("Locutora de un informativo de radio matinal en España, acento castellano peninsular. "
-                   "Tono cercano, claro y ágil; natural, sin dramatizar ni exagerar."),
     },
     "B": {
         "nombre": os.environ.get("NOMBRE_B") or "Martín",
-        "gemini": os.environ.get("VOZ_B") or "Charon",
+        "gemini": os.environ.get("VOZ_B") or "Puck",
         "edge": os.environ.get("EDGE_B") or "es-ES-AlvaroNeural",
-        "estilo": ("Locutor de un informativo de radio matinal en España, acento castellano peninsular. "
-                   "Tono cercano, claro y ágil; natural, sin dramatizar ni exagerar."),
     },
 }
+# Cómo tienen que sonar (se le dice a la voz de Gemini en cada turno)
+ESTILO_VOZ = os.environ.get("ESTILO_VOZ") or (
+    "Charla desenfadada y cercana entre dos amigos que comentan las noticias, en español de España "
+    "con acento castellano peninsular. Natural, con ritmo ágil y muy clara; con ganas, pero sin exagerar.")
 
 # Orden de intentos para la voz de Gemini: (forma de llamarla, modelo)
 MODELOS_VOZ = [
@@ -64,7 +64,7 @@ MODELOS_VOZ = [
     ("generate", "gemini-3.1-flash-tts-preview"),
     ("generate", "gemini-2.5-flash-preview-tts"),
 ]
-VOZ_MAX_CARACTERES = 2200    # trozos más largos se parten por párrafos
+VOZ_MAX_CARACTERES = 1800    # cada tanda de turnos que se genera de una vez
 EDGE_VELOCIDAD = "+4%"
 # Motor de voz: "gemini" (con reserva automática Edge) o "edge" (solo Edge)
 MOTOR_VOZ = (os.environ.get("MOTOR_VOZ") or "gemini").strip().lower()
@@ -73,7 +73,8 @@ MOTOR_VOZ = (os.environ.get("MOTOR_VOZ") or "gemini").strip().lower()
 DROPBOX_MP3 = "/Noticiario de hoy.mp3"
 DROPBOX_GUION = "/Guion de hoy.md"
 DROPBOX_CUMPLES = "/Cumpleaños.txt"   # la lista de cumpleaños vive SOLO aquí (el repositorio es público)
-DROPBOX_MUSICA = "/musica"   # si dejas aquí intro / transicion / fondo / cierre (.mp3 o .wav), se usan esos
+DROPBOX_MUSICA = "/musica"   # intro / transicion / cierre (.mp3 o .wav); si no hay, va sin música
+DROPBOX_DIAGNOSTICO = "/Diagnóstico.txt"   # datos técnicos de la última ejecución
 
 # ---------------------------------------------------------------- montaje
 MP3_KBPS = "96k"

@@ -105,6 +105,11 @@ def palabras(texto):
     return len(re.findall(r"\w+", texto or ""))
 
 
+def sin_tildes(s):
+    import unicodedata
+    return "".join(c for c in unicodedata.normalize("NFD", s or "") if unicodedata.category(c) != "Mn")
+
+
 def quitar_url(texto):
     return re.sub(r"https?://\S+", "", texto or "")
 

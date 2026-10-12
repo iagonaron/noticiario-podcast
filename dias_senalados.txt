@@ -1,0 +1,25 @@
+# Días señalados que el pódcast menciona al principio («hoy es…» / «mañana es…»).
+# Formato: MM-DD | Nombre tal y como se dirá. Las líneas con # se ignoran.
+# Los festivos (nacionales, de Galicia y locales de A Coruña) se calculan aparte.
+02-14 | San Valentín
+03-08 | Día Internacional de la Mujer
+03-22 | Día Mundial del Agua
+04-07 | Día Mundial de la Salud
+04-22 | Día de la Tierra
+04-23 | Día del Libro
+05-31 | Día Mundial Sin Tabaco
+06-05 | Día Mundial del Medio Ambiente
+06-21 | Día de la Música
+06-23 | la noche de San Juan
+09-21 | Día Mundial del Alzheimer
+10-01 | Día Internacional de la Música
+10-04 | Día Mundial de los Animales
+10-10 | Día Mundial de la Salud Mental
+10-16 | Día Mundial de la Alimentación
+10-31 | Samaín, el Halloween gallego
+11-01 | Día Mundial del Veganismo
+11-22 | Santa Cecilia, patrona de la música
+11-25 | Día Internacional contra la Violencia de Género
+12-24 | Nochebuena
+12-28 | el Día de los Inocentes
+12-31 | Nochevieja

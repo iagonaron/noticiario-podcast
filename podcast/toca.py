@@ -26,7 +26,8 @@ def decidir():
     if meta and meta.get("client_modified"):
         hecho = dt.datetime.strptime(meta["client_modified"], "%Y-%m-%dT%H:%M:%SZ").replace(
             tzinfo=dt.timezone.utc).astimezone(ZoneInfo(config.ZONA))
-        if hecho.date() == ahora.date():
+        # solo cuenta si se generó dentro de la ventana de la mañana (una prueba de madrugada no vale)
+        if hecho.date() == ahora.date() and hecho.hour >= config.HORA_MINIMA:
             return False, f"el de hoy ya está en Dropbox (de las {hecho:%H:%M})"
     return True, "toca"
 

@@ -1,9 +1,11 @@
-"""Monta el programa: sintonía, voces, transiciones, música bajo el tiempo y cierre.
+"""Monta el programa: sintonía, conversación y cierre musical.
 Al final iguala el volumen a nivel de pódcast (-16 LUFS) y lo guarda en MP3 para el iPhone.
+
+La música sale de la carpeta privada del pódcast en Dropbox (/musica: intro, transicion y cierre,
+en .mp3 o .wav). Si no hay, el programa va sin música.
 """
 import io
 import json
-import os
 import re
 import subprocess
 
@@ -11,9 +13,7 @@ from pydub import AudioSegment
 
 from . import config
 
-AQUI = os.path.dirname(os.path.abspath(__file__))
-CARPETA_MUSICA = os.path.join(AQUI, "..", "musica")
-PIEZAS = ("intro", "transicion", "fondo", "cierre")
+PIEZAS = ("intro", "transicion", "cierre")
 SR = 44100
 VOZ_DBFS = -19.0
 
@@ -24,90 +24,49 @@ def _mono(seg):
 
 def cargar_musica(desde_dropbox=None):
     """desde_dropbox: {'intro': bytes, ...} con lo que haya en la carpeta «musica» de Dropbox."""
-    musica = {}
-    for p in PIEZAS:
-        datos = (desde_dropbox or {}).get(p)
-        if datos:
-            musica[p] = _mono(AudioSegment.from_file(io.BytesIO(datos)))
-            continue
-        for ext in ("mp3", "wav"):
-            ruta = os.path.join(CARPETA_MUSICA, f"{p}.{ext}")
-            if os.path.exists(ruta):
-                musica[p] = _mono(AudioSegment.from_file(ruta))
-                break
-    return musica
+    return {p: _mono(AudioSegment.from_file(io.BytesIO(d))) for p, d in (desde_dropbox or {}).items() if d}
 
 
 def _nivelar(seg, objetivo=VOZ_DBFS):
-    if seg.dBFS == float("-inf"):
-        return seg
-    return seg.apply_gain(objetivo - seg.dBFS)
+    return seg if seg.dBFS == float("-inf") else seg.apply_gain(objetivo - seg.dBFS)
 
 
 def _silencio(ms):
     return AudioSegment.silent(duration=ms, frame_rate=SR)
 
 
-def _voces_por_segmento(audios, indice, n_segmentos):
-    voces = [None] * n_segmentos
-    for wav, i in zip(audios, indice):
-        trozo = _mono(AudioSegment.from_file(io.BytesIO(wav), format="wav"))
-        voces[i] = trozo if voces[i] is None else voces[i] + _silencio(120) + trozo
-    return [_nivelar(v) if v is not None else _silencio(10) for v in voces]
+def montar(unidades, musica, ruta_wav):
+    intro, trans, cierre = (musica.get(p) for p in PIEZAS)
+    voces = [_nivelar(_mono(AudioSegment.from_file(io.BytesIO(u["wav"]), format="wav"))) for u in unidades]
 
-
-def _con_fondo(voz, fondo):
-    """La voz del tiempo con la música de fondo muy baja, entrando y saliendo suave."""
-    if not fondo:
-        return voz
-    largo = len(voz) + 1800
-    cama = fondo
-    while len(cama) < largo:
-        cama = cama.append(fondo, crossfade=600)
-    cama = cama[:largo]
-    cama = cama.apply_gain((VOZ_DBFS - 21) - cama.dBFS).fade_in(900).fade_out(1600)
-    return cama.overlay(_silencio(500) + voz)
-
-
-def montar(segmentos, audios, indice, musica, ruta_wav):
-    voces = _voces_por_segmento(audios, indice, len(segmentos))
-    intro, trans, fondo, cierre = (musica.get(p) for p in PIEZAS)
-    if trans:
-        trans = trans.apply_gain(-3)
-
-    # 1) sintonía y, sobre su cola, el saludo
     if intro:
-        programa = intro.apply_gain(-2)
-        entrada = max(0, len(programa) - 1700)
-        programa = programa[:entrada] + programa[entrada:].fade_out(1700)
-        pos = entrada
+        # la sintonía suena y, mientras se apaga, entra la primera voz
+        programa = intro.apply_gain((VOZ_DBFS - 4) - intro.dBFS)
+        pos = max(0, len(programa) - 2800)
     else:
-        programa, pos = _silencio(300), 300
+        programa, pos = _silencio(250), 250
 
-    bloque_anterior, voz_anterior = None, None
-    for seg, voz in zip(segmentos, voces):
-        bloque = seg["bloque"]
-        if bloque_anterior is None:
+    anterior = None
+    for u, voz in zip(unidades, voces):
+        if anterior is None:
             pieza = voz
-        elif bloque in ("agenda",) or bloque == bloque_anterior:
-            pausa = 450 if seg["voz"] != voz_anterior else 300
-            pieza = _silencio(pausa) + voz
+        elif u["bloque"] == anterior:
+            pieza = _silencio(260) + voz
+        elif trans:
+            pieza = _silencio(250) + trans.apply_gain((VOZ_DBFS - 6) - trans.dBFS) + _silencio(200) + voz
         else:
-            pieza = (_silencio(250) + trans + _silencio(200)) if trans else _silencio(700)
-            pieza += (_con_fondo(voz, fondo) if bloque == "tiempo" else voz)
-        # se pega a partir de «pos», que puede caer dentro de la sintonía
-        fin_necesario = pos + len(pieza)
-        if fin_necesario > len(programa):
-            programa += _silencio(fin_necesario - len(programa))
+            pieza = _silencio(650) + voz
+        fin = pos + len(pieza)
+        if fin > len(programa):
+            programa += _silencio(fin - len(programa))
         programa = programa.overlay(pieza, position=pos)
-        pos = fin_necesario
-        bloque_anterior, voz_anterior = bloque, seg["voz"]
+        pos = fin
+        anterior = u["bloque"]
 
-    # 2) cierre musical
-    programa = programa[:pos] + _silencio(450)
+    programa = programa[:pos] + _silencio(500)
     if cierre:
-        programa += cierre.apply_gain(-2).fade_out(1500)
-    programa += _silencio(600)
+        programa += cierre.apply_gain((VOZ_DBFS - 4) - cierre.dBFS).fade_out(2500)
+    programa += _silencio(500)
     programa.export(ruta_wav, format="wav")
     return len(programa) / 1000.0
 
