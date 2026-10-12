@@ -455,8 +455,7 @@ def texto_breve(horas, r):
     uv = r.get("uv")
     if uv and uv.get("maximo", 0) >= config.UV_PROTECCION and uv.get("proteccion_solar_desde") is not None:
         a, b = uv["proteccion_solar_desde"], uv["proteccion_solar_hasta"]
-        na, nb = util.NUMEROS.get(a % 12 or 12), util.NUMEROS.get(b % 12 or 12)
-        frases.append(f"Crema, sí: entre la{'s' if (a % 12 or 12) != 1 else ''} {na} y la{'s' if (b % 12 or 12) != 1 else ''} {nb} pega fuerte el sol.")
+        frases.append(f"Crema, sí: el sol pega fuerte entre {util.hora_hablada(a)} y {util.hora_hablada(b)}.")
     else:
         frases.append("Crema, hoy no hace falta.")
     for a in (r.get("avisos_aemet") or [])[:2]:
