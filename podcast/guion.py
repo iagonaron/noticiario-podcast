@@ -52,7 +52,7 @@ FORMATO: UNA CONVERSACIÓN, NO UN TELEDIARIO
 - Que se entienda TODO a la primera: palabras sencillas, comparaciones con la vida diaria, cifras redondeadas («casi el doble», «unos 160.000»), siglas explicadas, nada de jerga. Si algo es técnico, se explica como a un amigo.
 - Escribe solo lo que se dice: sin acotaciones, sin nombres delante, sin paréntesis, sin enlaces, sin listas, sin emojis.
 - No des por hecho los gustos, costumbres o lo que come o hace Iago, ni le digas qué le va a interesar («esto para tus desayunos», «apúntatelo para luego»): cuenta la noticia y que él saque sus conclusiones.
-- El paseo y la perra, como mucho una vez y solo en el saludo.
+- El paseo y la perra, como mucho una vez en todo el programa (en el saludo); en la despedida, no.
 
 BLOQUES, EN ESTE ORDEN
 1. apertura: 2 a 4 turnos muy cortos. Saludan a Iago y entre ellos, con el día de la semana y la fecha, y dan paso a «lo rápido del día». Justo después, el programa pone sin ti los cumpleaños, festivos, agenda y tiempo, así que NO hables de eso.
@@ -95,7 +95,8 @@ def _datos_para_guionista(hoy_dt, noticias):
 
 class ErrorApi(Exception):
     def __init__(self, codigo, texto):
-        super().__init__(f"HTTP {codigo}: {texto[:400]}")
+        m = re.search(r'"message"\s*:\s*"([^"]{0,160})', texto or "")
+        super().__init__(f"HTTP {codigo}: {m.group(1) if m else (texto or '')[:160]}")
         self.codigo = codigo
         self.texto = texto
 
@@ -148,8 +149,9 @@ def _espera_429(texto):
 
 def _pedir_guion(sistema, usuario):
     errores, t0 = [], time.time()
-    for modelo in config.MODELOS_TEXTO:
-        for intento in range(2):
+    for n_modelo, modelo in enumerate(config.MODELOS_TEXTO):
+        intentos = 3 if n_modelo == 0 else 2       # con el mejor modelo, algo más de paciencia
+        for intento in range(intentos):
             if time.time() - t0 > 900:          # 15 minutos como mucho: después, boletín sin IA
                 errores.append("se acabó el tiempo para el guion")
                 return None, None, errores
@@ -164,18 +166,19 @@ def _pedir_guion(sistema, usuario):
                 return _parsear(texto), modelo, errores
             except ErrorApi as e:
                 errores.append(f"{modelo}: {e}")
-                if e.codigo == 429 and intento == 0:
+                if e.codigo == 429 and intento < intentos - 1 and "per day" not in e.texto.lower() \
+                        and "perday" not in e.texto.lower():
                     time.sleep(_espera_429(e.texto))
                     continue
-                if e.codigo >= 500 and intento == 0:
-                    time.sleep(8)
+                if e.codigo >= 500 and intento < intentos - 1:
+                    time.sleep(15 * (intento + 1))       # saturado: 15 s y luego 30 s
                     continue
                 break
             except requests.Timeout:
                 errores.append(f"{modelo}: no respondió a tiempo")
                 break                          # siguiente modelo
             except Exception as e:  # JSON roto, etc.
-                errores.append(f"{modelo}: {type(e).__name__}: {e}")
+                errores.append(f"{modelo}: {type(e).__name__}: {str(e)[:160]}")
                 if intento == 0:
                     continue
                 break

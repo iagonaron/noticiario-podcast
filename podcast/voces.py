@@ -166,7 +166,8 @@ def _post(url, cuerpo, etiqueta):
     except requests.RequestException as e:
         raise FalloVoz(f"{etiqueta}: {type(e).__name__}")
     if r.status_code != 200:
-        raise FalloVoz(f"{etiqueta} HTTP {r.status_code}: {r.text[:400]}")
+        # el texto completo sirve para distinguir el cupo diario («PerDay») del de por minuto
+        raise FalloVoz(f"{etiqueta} HTTP {r.status_code}: {r.text[:4000]}")
     try:
         datos = r.json()
     except ValueError:
@@ -224,6 +225,16 @@ def _razonable(wav, tanda):
     return 0.55 * esperado <= seg <= 1.8 * esperado + 3, seg, esperado
 
 
+def _resumen(msg):
+    """Error en una línea: «modelo HTTP 429: mensaje» (sin el JSON entero)."""
+    m = re.search(r'"message"\s*:\s*"([^"]{0,200})', msg or "")
+    cabeza = (msg or "").split(":", 1)[0] if " HTTP " in (msg or "") else ""
+    codigo = re.search(r"HTTP (\d{3})", msg or "")
+    if m:
+        return f"{cabeza.split(' HTTP')[0]} HTTP {codigo.group(1) if codigo else '?'}: {m.group(1)}"
+    return re.sub(r"\s+", " ", msg or "")[:260]
+
+
 def _es_cuota(msg):
     m = (msg or "").lower()
     return "http 429" in m or "resource_exhausted" in m or "rate limit" in m or "too_many_requests" in m
@@ -248,7 +259,7 @@ def _clasifica(msg):
     if re.search(r"http (400|401|403|404)\b", m) or "timeout" in m:
         return "cambiar"          # petición que el modelo no acepta, o que no contesta a tiempo
     if _es_cuota(m):
-        if "per day" in m or "per_day" in m or "perday" in m or "daily" in m:
+        if "per day" in m or "per_day" in m or "perday" in m or "daily" in m or "requests per day" in m:
             return "cambiar"
         return "cambiar" if _segundos_espera(m) > 150 else "esperar"
     if re.search(r"http (500|502|503|504)\b", m) or "overloaded" in m or "unavailable" in m or "connectionerror" in m:
@@ -268,13 +279,15 @@ def _pedir(via, modelo, tanda):
         except FalloVoz as e:
             error = str(e)
             tipo = _clasifica(error)
-            anota(f"  ✗ {modelo}: {n_car} car./{n_t} turnos · {time.time() - t0:.0f}s · {tipo} · {error[:260]}")
+            anota(f"  ✗ {modelo}: {n_car} car./{n_t} turnos · {time.time() - t0:.0f}s · {tipo} · {_resumen(error)}")
             if tipo == "cambiar":
-                raise ModeloAgotado(error)
-            if tipo == "esperar" and intento < 3:
-                time.sleep(min(90, max(8, _segundos_espera(error) + 3)))
-                continue
-            raise FalloVoz(error)
+                raise ModeloAgotado(_resumen(error))
+            if tipo == "esperar":
+                if intento < 3:
+                    time.sleep(min(90, max(8, _segundos_espera(error) + 3)))
+                    continue
+                raise ModeloAgotado(_resumen(error))     # sigue saturado o sin cupo: otro modelo
+            raise FalloVoz(_resumen(error))
         ok, seg, esp = _razonable(wav, tanda)
         anota(f"  {'✓' if ok else '✗'} {modelo}: {n_car} car./{n_t} turnos → {seg:.0f}s de audio "
               f"(esperado ~{esp:.0f}s) en {time.time() - t0:.0f}s")
