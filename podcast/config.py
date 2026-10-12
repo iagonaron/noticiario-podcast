@@ -39,34 +39,39 @@ MODELOS_TEXTO = [m.strip() for m in os.environ.get(
 
 # ---------------------------------------------------------------- voces
 # Dos presentadores que conversan (estilo NotebookLM). A abre el programa.
+# «piper» es la voz de último recurso, sin conexión (modelo[:hablante]).
 LOCUTORES = {
     "A": {
         "nombre": os.environ.get("NOMBRE_A") or "Lucía",
         "gemini": os.environ.get("VOZ_A") or "Kore",
         "edge": os.environ.get("EDGE_A") or "es-ES-ElviraNeural",
+        "piper": os.environ.get("PIPER_A") or "es_ES-sharvard-medium:F",
     },
     "B": {
         "nombre": os.environ.get("NOMBRE_B") or "Martín",
         "gemini": os.environ.get("VOZ_B") or "Puck",
         "edge": os.environ.get("EDGE_B") or "es-ES-AlvaroNeural",
+        "piper": os.environ.get("PIPER_B") or "es_ES-davefx-medium",
     },
 }
-# Cómo tienen que sonar (se le dice a la voz de Gemini en cada turno)
+# Cómo tienen que sonar (va como «estilo» en cada turno; Google recomienda que sea corto:
+# las instrucciones largas hacen que la voz se desvíe)
 ESTILO_VOZ = os.environ.get("ESTILO_VOZ") or (
-    "Charla desenfadada y cercana entre dos amigos que comentan las noticias, en español de España "
-    "con acento castellano peninsular. Natural, con ritmo ágil y muy clara; con ganas, pero sin exagerar.")
+    "charla desenfadada entre amigos, español de España, natural, ágil y muy clara")
 
 # Orden de intentos para la voz de Gemini: (forma de llamarla, modelo).
-# OJO: en el plan gratuito cada modelo de voz admite unas 10 peticiones al día (se van
-# recuperando poco a poco), así que el episodio se genera en pocas tandas largas y, si un
-# modelo se queda sin cupo a mitad, se sigue con el siguiente.
+# OJO: en el plan gratuito cada modelo de voz admite unas 10 peticiones al día (el cupo se
+# renueva a las 00:00 UTC, las 2:00 en Madrid), así que el episodio se genera en pocas tandas
+# largas y, si un modelo se queda sin cupo a mitad, se sigue con el siguiente.
 _MODELOS_VOZ_DEFECTO = ("interactions:gemini-3.8-flash-tts,interactions:gemini-3.8-flash-lite-tts,"
                         "generate:gemini-3.1-flash-tts-preview,generate:gemini-2.5-flash-preview-tts")
 MODELOS_VOZ = [tuple(x.strip().split(":", 1)) for x in
                (os.environ.get("MODELOS_VOZ") or _MODELOS_VOZ_DEFECTO).split(",") if ":" in x]
-VOZ_MAX_CARACTERES = 3500    # cada tanda de turnos que se genera de una vez (unas 4 por episodio)
+VOZ_MAX_CARACTERES = int(os.environ.get("VOZ_MAX_CARACTERES") or 3000)   # unas 5 tandas por episodio
+VOZ_TIMEOUT = 240            # segundos de espera máxima por petición de voz
 EDGE_VELOCIDAD = "+4%"
-# Motor de voz: "gemini" (con reserva automática Edge) o "edge" (solo Edge)
+PIPER_LENTITUD = 0.95        # <1 = algo más rápido
+# Motor de voz: "gemini" (con reservas automáticas: Edge y, si no, Piper), "edge" o "piper"
 MOTOR_VOZ = (os.environ.get("MOTOR_VOZ") or "gemini").strip().lower()
 
 # ---------------------------------------------------------------- Dropbox (carpeta de la app)

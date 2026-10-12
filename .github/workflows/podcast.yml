@@ -19,6 +19,10 @@ on:
         description: "Solo para pruebas: modelos de voz a usar (vacío = los de siempre)"
         required: false
         type: string
+      motor_voz:
+        description: "Solo para pruebas: gemini, edge o piper (vacío = el de siempre)"
+        required: false
+        type: string
 
 permissions:
   contents: write          # solo para el «latido» mensual que mantiene viva la programación
@@ -42,7 +46,7 @@ jobs:
       CALENDARIOS_ICS: ${{ secrets.CALENDARIOS_ICS }}
       VOZ_A: ${{ vars.VOZ_A }}
       VOZ_B: ${{ vars.VOZ_B }}
-      MOTOR_VOZ: ${{ vars.MOTOR_VOZ }}
+      MOTOR_VOZ: ${{ inputs.motor_voz || vars.MOTOR_VOZ }}
       MODELOS_VOZ: ${{ inputs.modelos_voz || vars.MODELOS_VOZ }}
     steps:
       - uses: actions/checkout@v5

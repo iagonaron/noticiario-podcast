@@ -5,9 +5,13 @@ on:
   workflow_dispatch:
     inputs:
       pruebas:
-        description: "Pruebas separadas por espacios: elpais noticias voz guion"
+        description: "Pruebas separadas por espacios: elpais noticias voz edge piper vozlarga guion"
         required: false
         default: "voz"
+        type: string
+      modelos_voz:
+        description: "Modelos de voz a probar (vacío = los de siempre)"
+        required: false
         type: string
 
 permissions:
@@ -20,6 +24,7 @@ jobs:
     env:
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       PRUEBAS: ${{ inputs.pruebas }}
+      MODELOS_VOZ: ${{ inputs.modelos_voz }}
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6

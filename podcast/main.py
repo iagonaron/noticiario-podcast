@@ -12,7 +12,7 @@ AQUI = os.path.dirname(os.path.abspath(__file__))
 SALIDA = os.path.join(AQUI, "..", "salida")
 
 
-ESTADO = {"etapa": "inicio", "t0": time.time(), "diag": [], "token": None}
+ESTADO = {"etapa": "inicio", "t0": time.time(), "diag": [], "avisos": [], "token": None}
 
 
 def etapa(nombre):
@@ -35,7 +35,7 @@ def resumen_github(lineas):
 
 def recoger_noticias(hoy, diag):
     """Noticias del noticiario. Si la Portada sale vacía, se reintenta enseguida; si sale de ayer
-    (El País aún no ha publicado la de hoy) y es temprano, se espera unos minutos."""
+    (El País aún no ha publicado la de hoy) y es por la mañana temprano, se espera unos minutos."""
     datos, avisos = None, []
     for intento in range(3):
         try:
@@ -50,7 +50,7 @@ def recoger_noticias(hoy, diag):
             continue
         if not datos["portada"]:
             continue                                   # vacía: probar otra vez ya
-        if noticias.portada_es_de_hoy(datos, hoy) or util.ahora().hour >= 9:
+        if noticias.portada_es_de_hoy(datos, hoy) or not (6 <= util.ahora().hour < 9):
             break
         util.log("La Portada (El País Exprés) aún es de ayer: espero 5 minutos y vuelvo a mirar")
         time.sleep(300)
@@ -78,7 +78,7 @@ def main():
     ahora = util.ahora()
     hoy = ahora.date()
     os.makedirs(SALIDA, exist_ok=True)
-    avisos, diag = [], ESTADO["diag"]
+    avisos, diag = ESTADO["avisos"], ESTADO["diag"]
     diag.append(f"Ejecución: {ahora:%Y-%m-%d %H:%M} (Madrid)")
     util.log(f"Noticiario de {util.fecha_larga(ahora)} · empiezo")
 
@@ -141,7 +141,10 @@ def main():
     # 4) voces, música y montaje
     with tempfile.TemporaryDirectory() as tmp:
         etapa("voces")
-        unidades, motor, av = voces.sintetizar(segs, tmp)
+        try:
+            unidades, motor, av = voces.sintetizar(segs, tmp)
+        finally:
+            diag += ["Registro de voz:"] + [f"  {l}" for l in voces.REGISTRO]
         avisos += av
         util.log(f"Voces: {motor} · {len(unidades)} tandas")
         diag.append(f"Voces: {motor} · {len(unidades)} tandas")
@@ -203,6 +206,7 @@ def main():
                                   f"{info.get('palabras')} palabras · noticias {len(datos['portada'])}+{len(datos['interes'])}+"
                                   f"{len(datos['local'])} · avisos {len(avisos)} · {(time.time() - t0) / 60:.1f} min · "
                                   + " | ".join(l for l in diag if l.startswith("[")))
+    anotar("notice", "Voz", "\n".join(voces.REGISTRO[-40:]))
     if not subido:
         util.log("⚠️ El MP3 no se subió a Dropbox.")
         sys.exit(1)
@@ -220,9 +224,12 @@ if __name__ == "__main__":
         anotar("error", "El noticiario falló",
                f"Etapa: {ESTADO['etapa']} · {time.time() - ESTADO['t0']:.0f}s · {type(e).__name__}: {str(e)[:400]} · "
                f"{donde[-1] if donde else ''}")
+        if voces.REGISTRO:
+            anotar("warning", "Voz", "\n".join(voces.REGISTRO[-40:]))
         if ESTADO.get("token"):
             try:
-                texto = "\n".join(ESTADO["diag"] + ["", "ERROR:", traza])
+                texto = "\n".join(ESTADO["diag"] + ["", "Avisos:"] + [f"  - {a}" for a in ESTADO["avisos"]]
+                                  + ["", "ERROR:", traza])
                 dropbox.subir(ESTADO["token"], config.DROPBOX_DIAGNOSTICO, texto.encode("utf-8"))
             except Exception:
                 pass
