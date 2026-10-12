@@ -110,7 +110,7 @@ def _llamar(modelo, sistema, usuario, con_esquema=True):
         "contents": [{"role": "user", "parts": [{"text": usuario}]}],
         "generationConfig": cfg,
     }
-    r = requests.post(URL.format(modelo=modelo), json=cuerpo, timeout=300,
+    r = requests.post(URL.format(modelo=modelo), json=cuerpo, timeout=420,
                       headers={"x-goog-api-key": clave, "Content-Type": "application/json"})
     if r.status_code != 200:
         raise ErrorApi(r.status_code, r.text)
@@ -147,9 +147,12 @@ def _espera_429(texto):
 
 
 def _pedir_guion(sistema, usuario):
-    errores = []
+    errores, t0 = [], time.time()
     for modelo in config.MODELOS_TEXTO:
         for intento in range(2):
+            if time.time() - t0 > 900:          # 15 minutos como mucho: después, boletín sin IA
+                errores.append("se acabó el tiempo para el guion")
+                return None, None, errores
             try:
                 try:
                     texto = _llamar(modelo, sistema, usuario, con_esquema=True)
@@ -168,6 +171,9 @@ def _pedir_guion(sistema, usuario):
                     time.sleep(8)
                     continue
                 break
+            except requests.Timeout:
+                errores.append(f"{modelo}: no respondió a tiempo")
+                break                          # siguiente modelo
             except Exception as e:  # JSON roto, etc.
                 errores.append(f"{modelo}: {type(e).__name__}: {e}")
                 if intento == 0:
