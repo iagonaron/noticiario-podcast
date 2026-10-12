@@ -85,7 +85,7 @@ def tandas(segmentos, maximo=None):
     maximo = maximo or config.VOZ_MAX_CARACTERES
     salida = []
     for s in segmentos:
-        for t in _frases(s["texto"], maximo):
+        for t in _frases(util.sin_emojis(s["texto"]), maximo):
             turno = {"voz": s["voz"], "texto": t, "bloque": s["bloque"]}
             ultima = salida[-1] if salida else None
             if ultima and _caracteres(ultima) + len(t) <= maximo:

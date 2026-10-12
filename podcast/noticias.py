@@ -39,11 +39,25 @@ async () => {
   try { out.avisos_aemet = await fetchAemetAlerts(); } catch (e) { out.avisos_aemet = []; }
   try {
     const m = await fetchMadridLastMatch();
+    let fecha = null;
+    if (m && typeof m === "object") {
+      const claves = Object.keys(m);
+      const buenas = claves.filter(k => /^(date|matchdate|kickoff|utcdate|fecha|starttime|start|datetime|time)$/i.test(k));
+      const otras = claves.filter(k => !buenas.includes(k) && /date|fecha|kick|utc|when/i.test(k)
+                                       && !/updat|fetch|cache|load|publi|creat|modif/i.test(k));
+      for (const k of [...buenas, ...otras]) {
+        const v = m[k];
+        const d = (typeof v === "number") ? new Date(v > 1e12 ? v : v * 1000)
+                : (typeof v === "string" || v instanceof Date) ? new Date(v) : null;
+        if (d && !isNaN(d) && d.getFullYear() > 2020) { fecha = d.toISOString(); out.madrid_fecha_clave = k; break; }
+      }
+    }
     out.madrid = (m && m.hadMatch)
       ? { jugo: true, rival: m.opponent || null,
           en_casa: (typeof m.atHome === "boolean") ? m.atHome : null,
-          resumen_disponible: !!m.highlightUrl }
+          resumen_disponible: !!m.highlightUrl, fecha }
       : { jugo: false };
+    out.madrid_claves = (m && typeof m === "object") ? Object.keys(m).join(",") : String(m);
   } catch (e) { out.madrid = null; }
   try {
     out.diagnostico = (STATE.diagnostics || []).map(d =>
@@ -75,6 +89,27 @@ def _depurar(datos):
             buenas.append(it)
         datos[seccion] = buenas
     return datos
+
+
+def _madrid(datos):
+    """Si se sabe la fecha del último partido: «cuando» = hoy/ayer/anteayer; si es más viejo (o aún
+    no se ha jugado), no se menciona. Sin fecha, se dice que jugó, pero no cuándo."""
+    md = datos.get("madrid")
+    if not isinstance(md, dict) or not md.get("jugo"):
+        return
+    fecha = md.pop("fecha", None)
+    if not fecha:
+        return
+    try:
+        f = dt.datetime.fromisoformat(str(fecha).replace("Z", "+00:00")).astimezone(util.MADRID)
+    except ValueError:
+        return
+    ahora = util.ahora()
+    dias = (ahora.date() - f.date()).days
+    if f > ahora or not 0 <= dias <= 2:
+        datos["madrid"] = {"jugo": False}
+    else:
+        md["cuando"] = ["hoy", "ayer", "anteayer"][dias]
 
 
 def portada_es_de_hoy(datos, hoy):
@@ -124,4 +159,5 @@ def recoger(espera_max=300):
         finally:
             nav.close()
     datos["carga"] = {"segundos": round(segundos), **estadistica}
+    _madrid(datos)
     return _depurar(datos)

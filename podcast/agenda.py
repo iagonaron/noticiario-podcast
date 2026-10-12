@@ -92,15 +92,15 @@ def obtener(hoy):
 
 def _titulo(e):
     """«21h Betis – Real Madrid» → «Betis contra Real Madrid» (la hora ya se dice aparte)."""
-    t = e["titulo"]
+    t = util.sin_emojis(e["titulo"])
     if e["min"] is not None:
         t = RE_HORA_TITULO.sub("", t, count=1).strip(" -–·:")
     t = re.sub(r"\(\s*sin hora\s*\)", ", aún sin hora", t, flags=re.I)
     if "madrid" in t.lower():
-        t = re.sub(r"\s*[–-]\s*", " contra ", t, count=1)
-    t = t.replace("–", ", ").replace(" - ", ", ")
+        t = re.sub(r"\s*[—–-]\s*", " contra ", t, count=1)
+    t = t.replace("—", ", ").replace("–", ", ").replace(" - ", ", ")
     t = re.sub(r"\s+,", ",", t)
-    return re.sub(r"\s{2,}", " ", t).strip(" ,") or e["titulo"]
+    return re.sub(r"\s{2,}", " ", t).strip(" ,") or util.sin_emojis(e["titulo"]) or "un evento"
 
 
 def _lista(eventos, maximo):

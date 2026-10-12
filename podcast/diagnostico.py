@@ -41,7 +41,7 @@ def noticias():
     d = nt.recoger()
     nota("Noticiario", f"{time.time() - t0:.0f}s · carga={d.get('carga')} · portada {len(d['portada'])} · "
                        f"interés {len(d['interes'])} · local {len(d['local'])} · alertas {len(d['alertas_sanitarias'])} · "
-                       f"madrid={d.get('madrid')}")
+                       f"madrid={d.get('madrid')} · claves={d.get('madrid_claves')} · fecha de={d.get('madrid_fecha_clave')}")
     fallos = [l for l in d.get("diagnostico") or [] if "fail" in l or "retry" in l]
     nota("Fuentes con fallos", "\n".join(fallos) or "ninguna")
 

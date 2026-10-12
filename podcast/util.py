@@ -105,6 +105,20 @@ def palabras(texto):
     return len(re.findall(r"\w+", texto or ""))
 
 
+def sin_emojis(texto):
+    """Quita emojis y pictogramas (la voz los leería raro o haría una pausa extraña)."""
+    import unicodedata
+    fuera = []
+    for c in texto or "":
+        o = ord(c)
+        if c in "\u200d\ufe0f\ufe0e\u20e3" or 0x1F000 <= o <= 0x1FAFF or 0x1F1E6 <= o <= 0x1F1FF:
+            continue
+        if o >= 0x2190 and unicodedata.category(c) in ("So", "Sk"):
+            continue
+        fuera.append(c)
+    return re.sub(r"[ \t]{2,}", " ", "".join(fuera)).strip()
+
+
 def sin_tildes(s):
     import unicodedata
     return "".join(c for c in unicodedata.normalize("NFD", s or "") if unicodedata.category(c) != "Mn")

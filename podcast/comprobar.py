@@ -24,7 +24,7 @@ def norma(t):
 def main():
     token = dropbox.token_acceso()
     mp3 = dropbox.descargar(token, config.DROPBOX_MP3)
-    md = dropbox.descargar(token, config.DROPBOX_GUION).decode("utf-8", "replace")
+    md = dropbox.descargar(token, config.DROPBOX_GUION).decode("utf-8-sig", "replace")
     with tempfile.TemporaryDirectory() as tmp:
         ruta = os.path.join(tmp, "e.mp3")
         open(ruta, "wb").write(mp3)
@@ -38,7 +38,12 @@ def main():
         integrada = re.findall(r"I:\s+(-?[\d.]+) LUFS", lu)
         from faster_whisper import WhisperModel
         modelo = WhisperModel(os.environ.get("WHISPER", "base"), device="cpu", compute_type="int8")
-        trozos, _ = modelo.transcribe(ruta, language="es", vad_filter=True, beam_size=1)
+        # el audio se decodifica con ffmpeg (la lectura interna de faster-whisper falla con algunas versiones de PyAV)
+        import numpy as np
+        pcm = subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-i", ruta, "-ac", "1", "-ar", "16000",
+                              "-f", "s16le", "-"], capture_output=True, check=True).stdout
+        senal = np.frombuffer(pcm, np.int16).astype(np.float32) / 32768.0
+        trozos, _ = modelo.transcribe(senal, language="es", vad_filter=True, beam_size=1)
         trozos = list(trozos)
     texto_oido = " ".join(t.text.strip() for t in trozos)
     guion = " ".join(re.sub(r"^\*\*[^*]+:\*\*\s*", "", l) for l in md.splitlines() if l.startswith("**"))
@@ -58,7 +63,7 @@ def main():
                f"Posibles lecturas raras: {sospechas or 'ninguna'}",
                "", "Trozos del guion que no se oyen (o se oyen distinto):"] + [f"  - {f}" for f in faltan[:25]] + \
               ["", "Transcripción con tiempos:"] + [f"[{int(t.start // 60):02d}:{int(t.start % 60):02d}] {t.text.strip()}" for t in trozos]
-    dropbox.subir(token, "/Comprobación.txt", "\n".join(informe).encode("utf-8"))
+    dropbox.subir(token, "/Comprobación.txt", "\n".join(informe).encode("utf-8-sig"))
     nota("Comprobación", f"{dur / 60:.1f} min · parecido {parecido:.0%} · {ppm:.0f} p/min · silencios>2s: {len(silencios)} · "
                          f"lecturas raras: {len(sospechas)} · trozos que no se oyen: {len(faltan)}")
 

@@ -50,14 +50,16 @@ FORMATO: UNA CONVERSACIÓN, NO UN TELEDIARIO
 - Uno cuenta la noticia y el otro hace las preguntas que se haría cualquiera («¿y eso en qué me afecta?», «a ver, explícame eso»), reacciona («¡no me digas!», «ojo con esto»), resume o pone un ejemplo. Van turnándose ese papel.
 - Español de España, coloquial y natural, de tú. Desenfadado, con humor ligero cuando cuadre, pero sin pasarse: nada de chistes malos, risas escritas, gritos ni exageraciones.
 - Que se entienda TODO a la primera: palabras sencillas, comparaciones con la vida diaria, cifras redondeadas («casi el doble», «unos 160.000»), siglas explicadas, nada de jerga. Si algo es técnico, se explica como a un amigo.
-- Escribe solo lo que se dice: sin acotaciones, sin nombres delante, sin paréntesis, sin enlaces, sin listas.
+- Escribe solo lo que se dice: sin acotaciones, sin nombres delante, sin paréntesis, sin enlaces, sin listas, sin emojis.
+- No des por hecho los gustos, costumbres o lo que come o hace Iago, ni le digas qué le va a interesar («esto para tus desayunos», «apúntatelo para luego»): cuenta la noticia y que él saque sus conclusiones.
+- El paseo y la perra, como mucho una vez y solo en el saludo.
 
 BLOQUES, EN ESTE ORDEN
 1. apertura: 2 a 4 turnos muy cortos. Saludan a Iago y entre ellos, con el día de la semana y la fecha, y dan paso a «lo rápido del día». Justo después, el programa pone sin ti los cumpleaños, festivos, agenda y tiempo, así que NO hables de eso.
 2. portada: empieza con un enlace del tipo «Y ahora sí, las noticias». Las de la portada de El País Exprés.
 3. interes: ciencia, tecnología e IA, economía, investigación y salud y longevidad. Si hay alertas sanitarias, se dicen claras al final de este bloque; si no hay, ni se mencionan.
 4. local: A Coruña y Galicia.
-5. cierre: 2 a 4 turnos. Si en «madrid» pone que jugó, dicen solo que jugó (y contra quién, si viene) y que tiene el resumen en el noticiario. Despedida breve y con buen rollo.
+5. cierre: 2 a 4 turnos. Si en «madrid» pone que jugó, dicen solo que jugó (contra quién, si viene; cuándo, solo si viene «cuando», y si no, sin decir ni «anoche» ni «ayer») y que tiene el resumen en el noticiario. Despedida breve y con buen rollo.
 
 QUÉ CONTAR
 - Cuenta TODAS las noticias que te paso ({n_noticias} en total), salvo las repetidas, las que sean solo del tiempo y las de resultados del Madrid.

@@ -118,7 +118,7 @@ def main():
             if lista is None:
                 avisos.append(f"No encuentro {config.DROPBOX_CUMPLES} en la carpeta del pódcast.")
             else:
-                texto_dias = cumples.texto(cumples.leer(lista.decode("utf-8", "replace")), hoy)
+                texto_dias = cumples.texto(cumples.leer(lista.decode("utf-8-sig", "replace")), hoy)
         except Exception as e:
             avisos.append(f"Cumpleaños: no se pudo leer la lista ({type(e).__name__})")
     try:
@@ -185,12 +185,12 @@ def main():
     if token:
         with open(mp3, "rb") as f:
             dropbox.subir(token, config.DROPBOX_MP3, f.read())
-        dropbox.subir(token, config.DROPBOX_GUION, md.encode("utf-8"))
+        dropbox.subir(token, config.DROPBOX_GUION, md.encode("utf-8-sig"))
         subido = True
         util.log("Subido a Dropbox")
         try:
             texto_diag = "\n".join(diag + ["", "Avisos:"] + [f"  - {a}" for a in avisos])
-            dropbox.subir(token, config.DROPBOX_DIAGNOSTICO, texto_diag.encode("utf-8"))
+            dropbox.subir(token, config.DROPBOX_DIAGNOSTICO, texto_diag.encode("utf-8-sig"))
         except Exception:
             pass
 
@@ -230,7 +230,7 @@ if __name__ == "__main__":
             try:
                 texto = "\n".join(ESTADO["diag"] + ["", "Avisos:"] + [f"  - {a}" for a in ESTADO["avisos"]]
                                   + ["", "ERROR:", traza])
-                dropbox.subir(ESTADO["token"], config.DROPBOX_DIAGNOSTICO, texto.encode("utf-8"))
+                dropbox.subir(ESTADO["token"], config.DROPBOX_DIAGNOSTICO, texto.encode("utf-8-sig"))
             except Exception:
                 pass
         resumen_github(["## ⚠️ El noticiario de hoy falló", f"Etapa: {ESTADO['etapa']}"])
