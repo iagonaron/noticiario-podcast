@@ -1,0 +1,22 @@
+# Diagnóstico técnico a mano (no se ejecuta solo). Solo lee webs públicas; no usa ningún secreto.
+name: Diagnóstico
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diagnostico:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - run: |
+          pip install playwright
+          python -m playwright install --with-deps chromium
+      - run: python -m podcast.diagnostico --navegador
