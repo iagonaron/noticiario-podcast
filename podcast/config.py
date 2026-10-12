@@ -68,7 +68,7 @@ _MODELOS_VOZ_DEFECTO = ("interactions:gemini-3.8-flash-tts,interactions:gemini-3
 MODELOS_VOZ = [tuple(x.strip().split(":", 1)) for x in
                (os.environ.get("MODELOS_VOZ") or _MODELOS_VOZ_DEFECTO).split(",") if ":" in x]
 VOZ_MAX_CARACTERES = int(os.environ.get("VOZ_MAX_CARACTERES") or 3000)   # unas 5 tandas por episodio
-VOZ_TIMEOUT = 240            # segundos de espera máxima por petición de voz
+VOZ_TIMEOUT = 180            # segundos de espera máxima por petición de voz (si no, otro modelo)
 EDGE_VELOCIDAD = "+4%"
 PIPER_LENTITUD = 0.95        # <1 = algo más rápido
 # Motor de voz: "gemini" (con reservas automáticas: Edge y, si no, Piper), "edge" o "piper"

@@ -245,8 +245,8 @@ def _clasifica(msg):
     """'cambiar' (cupo diario agotado o el modelo no acepta la petición), 'esperar' (límite por
     minuto o servidor saturado) u 'otro' (audio raro, tiempo agotado… → partir la tanda)."""
     m = (msg or "").lower()
-    if re.search(r"http (400|401|403|404)\b", m):
-        return "cambiar"
+    if re.search(r"http (400|401|403|404)\b", m) or "timeout" in m:
+        return "cambiar"          # petición que el modelo no acepta, o que no contesta a tiempo
     if _es_cuota(m):
         if "per day" in m or "per_day" in m or "perday" in m or "daily" in m:
             return "cambiar"
