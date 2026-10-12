@@ -387,9 +387,9 @@ def _piper_cargar():
 
 
 def sintetizar_piper(lista):
+    voces = _piper_cargar()          # primero: instala Piper si hace falta
     from piper import SynthesisConfig
     from pydub import AudioSegment
-    voces = _piper_cargar()
     audios = []
     for tanda in lista:
         trozos = []
