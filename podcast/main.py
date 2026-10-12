@@ -12,6 +12,20 @@ AQUI = os.path.dirname(os.path.abspath(__file__))
 SALIDA = os.path.join(AQUI, "..", "salida")
 
 
+ESTADO = {"etapa": "inicio", "t0": time.time(), "diag": [], "token": None}
+
+
+def etapa(nombre):
+    ESTADO["etapa"] = nombre
+    ESTADO["diag"].append(f"[{time.time() - ESTADO['t0']:.0f}s] {nombre}")
+    util.log(f"— {nombre}")
+
+
+def anotar(nivel, titulo, texto):
+    texto = str(texto).replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+    print(f"::{nivel} title={titulo}::{texto[:3000]}", flush=True)
+
+
 def resumen_github(lineas):
     ruta = os.environ.get("GITHUB_STEP_SUMMARY")
     if ruta:
@@ -64,23 +78,28 @@ def main():
     ahora = util.ahora()
     hoy = ahora.date()
     os.makedirs(SALIDA, exist_ok=True)
-    avisos, diag = [], [f"Ejecución: {ahora:%Y-%m-%d %H:%M} (Madrid)"]
+    avisos, diag = [], ESTADO["diag"]
+    diag.append(f"Ejecución: {ahora:%Y-%m-%d %H:%M} (Madrid)")
     util.log(f"Noticiario de {util.fecha_larga(ahora)} · empiezo")
 
     token = None
+    etapa("Dropbox")
     try:
         token = dropbox.token_acceso()
+        ESTADO["token"] = token
     except Exception as e:
         avisos.append(f"Dropbox: {e}")
         util.log(avisos[-1])
 
     # 1) noticias
+    etapa("noticias")
     datos, av = recoger_noticias(hoy, diag)
     avisos += av
     diag += ["Fuentes del noticiario:"] + [f"  {l}" for l in (datos.get("diagnostico") or [])]
     util.log(f"Noticias: portada {len(datos['portada'])}, interés {len(datos['interes'])}, local {len(datos['local'])}")
 
     # 2) lo rápido: cumpleaños y festivos, agenda, tiempo
+    etapa("tiempo, agenda, cumpleaños y festivos")
     horas, fuente_tiempo, av, mg = tiempo.obtener_horas(hoy)
     avisos += av
     resumen_t = tiempo.resumir(horas, mg, datos.get("avisos_aemet"))
@@ -108,6 +127,7 @@ def main():
         avisos.append(f"Festivos: {type(e).__name__}: {e}"[:200])
 
     # 3) la conversación
+    etapa("guion")
     segs_ia, info = guion.escribir(ahora, datos)
     avisos += info.get("avisos", [])
     ap = [s for s in segs_ia if s["bloque"] == "apertura"]
@@ -120,6 +140,7 @@ def main():
 
     # 4) voces, música y montaje
     with tempfile.TemporaryDirectory() as tmp:
+        etapa("voces")
         unidades, motor, av = voces.sintetizar(segs, tmp)
         avisos += av
         util.log(f"Voces: {motor} · {len(unidades)} tandas")
@@ -136,6 +157,7 @@ def main():
                         de_dropbox[nombre] = dropbox.descargar(token, e["path_lower"])
             except Exception as e:
                 avisos.append(f"Música de Dropbox: {e}"[:300])
+        etapa("montaje")
         musica = montaje.cargar_musica(de_dropbox)
         diag.append(f"Música: {', '.join(sorted(musica)) or 'ninguna'}")
         wav = os.path.join(tmp, "programa.wav")
@@ -155,6 +177,7 @@ def main():
         json.dump({"tiempo": resumen_t, "horas": horas, "noticias": datos}, f, ensure_ascii=False, indent=1, default=str)
 
     # 5) a Dropbox
+    etapa("subida a Dropbox")
     subido = False
     if token:
         with open(mp3, "rb") as f:
@@ -176,6 +199,10 @@ def main():
         f"- Dropbox: {'✅ subido' if subido else '⚠️ NO subido'} · tardó {(time.time() - t0) / 60:.1f} min",
         f"- Avisos: {len(avisos)} (el detalle está en «Diagnóstico.txt», en tu Dropbox)",
     ])
+    anotar("notice", "Episodio", f"{duracion / 60:.1f} min · voz {motor} · guion {info.get('modelo')} · "
+                                  f"{info.get('palabras')} palabras · noticias {len(datos['portada'])}+{len(datos['interes'])}+"
+                                  f"{len(datos['local'])} · avisos {len(avisos)} · {(time.time() - t0) / 60:.1f} min · "
+                                  + " | ".join(l for l in diag if l.startswith("[")))
     if not subido:
         util.log("⚠️ El MP3 no se subió a Dropbox.")
         sys.exit(1)
@@ -186,7 +213,18 @@ if __name__ == "__main__":
         main()
     except SystemExit:
         raise
-    except Exception:
-        traceback.print_exc()
-        resumen_github(["## ⚠️ El noticiario de hoy falló", "```", traceback.format_exc()[-3000:], "```"])
+    except Exception as e:
+        traza = traceback.format_exc()
+        print(traza, flush=True)
+        donde = [l.strip() for l in traza.splitlines() if l.strip().startswith('File "') and "/podcast/" in l]
+        anotar("error", "El noticiario falló",
+               f"Etapa: {ESTADO['etapa']} · {time.time() - ESTADO['t0']:.0f}s · {type(e).__name__}: {str(e)[:400]} · "
+               f"{donde[-1] if donde else ''}")
+        if ESTADO.get("token"):
+            try:
+                texto = "\n".join(ESTADO["diag"] + ["", "ERROR:", traza])
+                dropbox.subir(ESTADO["token"], config.DROPBOX_DIAGNOSTICO, texto.encode("utf-8"))
+            except Exception:
+                pass
+        resumen_github(["## ⚠️ El noticiario de hoy falló", f"Etapa: {ESTADO['etapa']}"])
         sys.exit(1)

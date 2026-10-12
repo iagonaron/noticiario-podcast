@@ -1,8 +1,14 @@
-# Diagnóstico técnico a mano (no se ejecuta solo). Solo lee webs públicas; no usa ningún secreto.
+# Diagnóstico técnico a mano (no se ejecuta solo). Los resultados son anotaciones sin datos personales.
 name: Diagnóstico
 
 on:
   workflow_dispatch:
+    inputs:
+      pruebas:
+        description: "Pruebas separadas por espacios: elpais noticias voz guion"
+        required: false
+        default: "voz"
+        type: string
 
 permissions:
   contents: read
@@ -10,13 +16,18 @@ permissions:
 jobs:
   diagnostico:
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 25
+    env:
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      PRUEBAS: ${{ inputs.pruebas }}
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
+          cache: pip
       - run: |
-          pip install playwright
+          pip install -r requirements.txt
           python -m playwright install --with-deps chromium
-      - run: python -m podcast.diagnostico --navegador
+          command -v ffmpeg || (sudo apt-get update -y && sudo apt-get install -y ffmpeg)
+      - run: python -m podcast.diagnostico $PRUEBAS
