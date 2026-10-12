@@ -33,6 +33,14 @@ NOMBRES = {
 }
 
 
+# Fiestas de fecha fija: si un año caen en domingo y no se trasladan, la librería no las da como
+# festivo, pero el día sigue siendo señalado («Hoy es Todos los Santos»)
+FIJAS = {(1, 1): "Año Nuevo", (1, 6): "el Día de Reyes", (5, 1): "el Día del Trabajo",
+         (5, 17): "el Día de las Letras Gallegas", (7, 25): "el Día de Galicia", (8, 15): "la Asunción",
+         (10, 12): "la Fiesta Nacional, el Día de la Hispanidad", (11, 1): "Todos los Santos",
+         (12, 6): "el Día de la Constitución", (12, 8): "la Inmaculada", (12, 25): "Navidad"}
+
+
 def _festivos(anio):
     try:
         return holidays.country_holidays("ES", subdiv="GA", years=[anio], language="es")
@@ -74,6 +82,8 @@ def frases(fecha, cuando):
     fest = _festivos(fecha.year).get(fecha)
     if fest:
         out.append(f"{cuando} es festivo: {NOMBRES.get(fest, fest)}")
+    elif (fecha.month, fecha.day) in FIJAS:
+        out.append(f"{cuando} es {FIJAS[(fecha.month, fecha.day)]}")
     if fecha in LOCALES:
         out.append(f"{cuando} es festivo en A Coruña: {LOCALES[fecha]}")
     dia = _dias(fecha.year).get(fecha)
@@ -90,6 +100,19 @@ def frases(fecha, cuando):
     return out
 
 
+def _unir(partes):
+    """«Mañana es A. Mañana es B.» → «Mañana es A, y también B.»"""
+    salida = []
+    for p in partes:
+        for pref in ("Hoy es ", "Mañana es "):
+            if p.startswith(pref) and salida and salida[-1].startswith(pref):
+                salida[-1] += ", y también " + p[len(pref):]
+                break
+        else:
+            salida.append(p)
+    return salida
+
+
 def texto(hoy):
-    partes = frases(hoy, "Hoy") + frases(hoy + dt.timedelta(days=1), "Mañana")
+    partes = _unir(frases(hoy, "Hoy")) + _unir(frases(hoy + dt.timedelta(days=1), "Mañana"))
     return " ".join(p[0].upper() + p[1:] + "." for p in partes)
