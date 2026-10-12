@@ -28,8 +28,8 @@ PROB_LLUVIA_FRANJA = 40     # % a partir del cual una hora cuenta como «puede l
 UV_PROTECCION = 3           # índice UV a partir del cual se recomienda protección solar
 
 # ---------------------------------------------------------------- guion
-PALABRAS_MIN = 1800          # parte conversada (sin lo rápido del principio): 12-15 min en total
-PALABRAS_MAX = 2300
+PALABRAS_MIN = 1700          # parte conversada (sin lo rápido del principio): 12-15 min en total
+PALABRAS_MAX = 2100
 TEXTO_MAX_NOTICIA = 1800     # caracteres de cada noticia que se le pasan al guionista
 
 MODELOS_TEXTO = [m.strip() for m in os.environ.get(

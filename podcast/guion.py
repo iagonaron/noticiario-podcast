@@ -71,7 +71,7 @@ QUÉ CONTAR
 - Los cambios de bloque, dentro de la conversación («Vale, y ahora cosas de aquí, de Coruña…»), sin repetir siempre la misma fórmula.
 
 LONGITUD
-- Entre {config.PALABRAS_MIN} y {config.PALABRAS_MAX} palabras en total (el programa entero dura de 12 a 15 minutos). Reparto orientativo: apertura 50, portada 850, interes 650, local 550, cierre 60.
+- Entre {config.PALABRAS_MIN} y {config.PALABRAS_MAX} palabras en total (el programa entero dura de 12 a 15 minutos). Reparto orientativo: apertura 50, portada 780, interes 580, local 520, cierre 60. No te pases: mejor quedarse corto que largo.
 
 SALIDA
 - Solo el JSON con la lista «segmentos»: cada turno es un segmento con «bloque», «voz» (A o B) y «texto» (exactamente lo que se dice)."""
