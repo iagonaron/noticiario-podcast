@@ -64,4 +64,11 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception:
+        import traceback
+        t = traceback.format_exc()
+        print(t, flush=True)
+        print("::error title=Comprobación falló::" + t[-1500:].replace("%", "%25").replace("\n", "%0A"), flush=True)
+        raise SystemExit(1)
