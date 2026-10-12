@@ -59,14 +59,14 @@ def _frases(texto, maximo):
 
 
 def tandas(segmentos, maximo=config.VOZ_MAX_CARACTERES):
-    """Agrupa turnos seguidos del mismo bloque en tandas de como mucho `maximo` caracteres."""
+    """Agrupa turnos seguidos en tandas de como mucho `maximo` caracteres (pueden abarcar varios
+    bloques: la conversación ya enlaza sola). Menos tandas = menos peticiones al cupo gratuito."""
     salida = []
     for s in segmentos:
         for t in _frases(s["texto"], maximo):
-            turno = {"voz": s["voz"], "texto": t}
+            turno = {"voz": s["voz"], "texto": t, "bloque": s["bloque"]}
             ultima = salida[-1] if salida else None
-            if (ultima and ultima["bloque"] == s["bloque"]
-                    and sum(len(x["texto"]) for x in ultima["turnos"]) + len(t) <= maximo):
+            if ultima and sum(len(x["texto"]) for x in ultima["turnos"]) + len(t) <= maximo:
                 ultima["turnos"].append(turno)
             else:
                 salida.append({"bloque": s["bloque"], "turnos": [turno]})
@@ -176,44 +176,53 @@ def _espera(msg):
     return min(75, int(m.group(1)) + 2) if m else 30
 
 
+def _es_cuota(msg):
+    m = (msg or "").lower()
+    return "429" in m or "resource_exhausted" in m or "rate limit" in m or "too_many_requests" in m
+
+
+def _una_tanda(via, modelo, tanda, partir=True):
+    """Lista de (tanda, wav). Si el audio sale raro o hay un error que no es de cupo, se parte la
+    tanda en dos y se reintenta una vez. Los errores de cupo se pasan arriba para cambiar de modelo."""
+    try:
+        wav = _llamada(via, modelo, tanda)
+        ok, seg, esp = _razonable(wav, tanda)
+        if ok:
+            return [(tanda, wav)]
+        error = f"duración rara ({seg:.0f}s, esperaba ~{esp:.0f}s)"
+    except FalloVoz as e:
+        error = str(e)
+        if _es_cuota(error):
+            raise
+    if partir and len(tanda["turnos"]) > 1:
+        mitad = len(tanda["turnos"]) // 2
+        a = {"bloque": tanda["turnos"][0]["bloque"], "turnos": tanda["turnos"][:mitad]}
+        b = {"bloque": tanda["turnos"][mitad]["bloque"], "turnos": tanda["turnos"][mitad:]}
+        return _una_tanda(via, modelo, a, False) + _una_tanda(via, modelo, b, False)
+    raise FalloVoz(error)
+
+
 def sintetizar_gemini(lista):
+    """Recorre las tandas con el mejor modelo disponible; si uno se queda sin cupo o falla a mitad,
+    las que faltan siguen con el siguiente modelo (lo ya hecho se aprovecha)."""
     if not os.environ.get("GEMINI_API_KEY"):
         raise FalloVoz("Falta el secreto GEMINI_API_KEY")
-    # se prueba el modelo con la primera tanda que tenga las dos voces (así se valida el modo conversación)
-    primera = next((i for i, t in enumerate(lista) if len({x["voz"] for x in t["turnos"]}) > 1), 0)
-    elegido, errores, audios = None, [], [None] * len(lista)
+    hechas, usados, errores = [], [], []
+    pendientes = list(lista)
     for via, modelo in config.MODELOS_VOZ:
-        try:
-            wav = _llamada(via, modelo, lista[primera])
-            ok, seg, esp = _razonable(wav, lista[primera])
-            if not ok:
-                raise FalloVoz(f"{modelo}: duración rara ({seg:.0f}s, esperaba ~{esp:.0f}s)")
-            elegido, audios[primera] = (via, modelo), wav
-            util.log(f"Voz Gemini: {modelo} ({via})")
-            break
-        except Exception as e:
-            errores.append(str(e)[:300])
-    if not elegido:
-        raise FalloVoz("Ningún modelo de voz de Gemini respondió: " + " | ".join(errores))
-    for n, tanda in enumerate(lista):
-        if audios[n] is not None:
-            continue
-        ultimo = None
-        for intento in range(4):
+        while pendientes:
             try:
-                time.sleep(2)
-                wav = _llamada(*elegido, tanda)
-                ok, seg, esp = _razonable(wav, tanda)
-                if not ok:
-                    raise FalloVoz(f"duración rara en la tanda {n + 1} ({seg:.0f}s, esperaba ~{esp:.0f}s)")
-                audios[n] = wav
-                break
+                hechas += _una_tanda(via, modelo, pendientes[0])
+                if modelo not in usados:
+                    usados.append(modelo)
+                    util.log(f"Voz Gemini: {modelo} ({via})")
+                pendientes.pop(0)
             except Exception as e:
-                ultimo = str(e)
-                time.sleep(_espera(ultimo) if ("429" in ultimo or "RESOURCE_EXHAUSTED" in ultimo) else 5 * (intento + 1))
-        else:
-            raise FalloVoz(f"Tanda {n + 1} de {len(lista)}: {ultimo[:300] if ultimo else 'sin respuesta'}")
-    return audios, f"Gemini · {elegido[1]}"
+                errores.append(f"{modelo}: {str(e)[:250]}")
+                break
+        if not pendientes:
+            return hechas, "Gemini · " + " + ".join(usados), errores
+    raise FalloVoz("La voz de Gemini no pudo con todo: " + " | ".join(errores))
 
 
 # ---------------------------------------------------------------- Edge
@@ -225,6 +234,8 @@ async def _edge_uno(texto, voz, ruta):
 def sintetizar_edge(lista, carpeta):
     from pydub import AudioSegment
     audios = []
+    if not lista:
+        return [], "Edge"
     for n, tanda in enumerate(lista, 1):
         total = None
         for k, t in enumerate(tanda["turnos"], 1):
@@ -247,20 +258,22 @@ def sintetizar_edge(lista, carpeta):
 
 # ---------------------------------------------------------------- todo junto
 def sintetizar(segmentos, carpeta):
-    """Devuelve (unidades, motor, avisos). Cada unidad: {'bloque', 'wav', 'palabras', 'segundos'}."""
+    """Devuelve (unidades, motor, avisos). Cada unidad: {'bloque', 'wav', 'palabras', 'segundos', 'voces'}."""
     lista = tandas(segmentos)
-    avisos = []
-    audios = motor = None
+    avisos, pares, motor = [], None, None
     if config.MOTOR_VOZ != "edge":
         try:
-            audios, motor = sintetizar_gemini(lista)
+            pares, motor, errores = sintetizar_gemini(lista)
+            if errores:
+                avisos.append("Voz: algún modelo se quedó sin cupo o falló y se siguió con otro: " + " | ".join(errores)[:600])
         except Exception as e:
-            avisos.append(f"Voz de Gemini no disponible, uso Edge para todo el episodio: {str(e)[:400]}")
+            avisos.append(f"Voz de Gemini no disponible, uso Edge para todo el episodio: {str(e)[:500]}")
             util.log(avisos[-1])
-    if audios is None:
+    if pares is None:
         audios, motor = sintetizar_edge(lista, carpeta)
+        pares = list(zip(lista, audios))
     unidades = [{"bloque": t["bloque"], "wav": a, "segundos": duracion_wav(a),
                  "palabras": sum(util.palabras(x["texto"]) for x in t["turnos"]),
                  "voces": "".join(sorted({x["voz"] for x in t["turnos"]}))}
-                for t, a in zip(lista, audios)]
+                for t, a in pares]
     return unidades, motor, avisos

@@ -56,15 +56,15 @@ ESTILO_VOZ = os.environ.get("ESTILO_VOZ") or (
     "Charla desenfadada y cercana entre dos amigos que comentan las noticias, en español de España "
     "con acento castellano peninsular. Natural, con ritmo ágil y muy clara; con ganas, pero sin exagerar.")
 
-# Orden de intentos para la voz de Gemini: (forma de llamarla, modelo)
-MODELOS_VOZ = [
-    ("interactions", "gemini-3.8-flash-tts"),
-    ("interactions", "gemini-3.8-flash-lite-tts"),
-    ("interactions", "gemini-3.1-flash-tts-preview"),
-    ("generate", "gemini-3.1-flash-tts-preview"),
-    ("generate", "gemini-2.5-flash-preview-tts"),
-]
-VOZ_MAX_CARACTERES = 1800    # cada tanda de turnos que se genera de una vez
+# Orden de intentos para la voz de Gemini: (forma de llamarla, modelo).
+# OJO: en el plan gratuito cada modelo de voz admite unas 10 peticiones al día (se van
+# recuperando poco a poco), así que el episodio se genera en pocas tandas largas y, si un
+# modelo se queda sin cupo a mitad, se sigue con el siguiente.
+_MODELOS_VOZ_DEFECTO = ("interactions:gemini-3.8-flash-tts,interactions:gemini-3.8-flash-lite-tts,"
+                        "generate:gemini-3.1-flash-tts-preview,generate:gemini-2.5-flash-preview-tts")
+MODELOS_VOZ = [tuple(x.strip().split(":", 1)) for x in
+               (os.environ.get("MODELOS_VOZ") or _MODELOS_VOZ_DEFECTO).split(",") if ":" in x]
+VOZ_MAX_CARACTERES = 3500    # cada tanda de turnos que se genera de una vez (unas 4 por episodio)
 EDGE_VELOCIDAD = "+4%"
 # Motor de voz: "gemini" (con reserva automática Edge) o "edge" (solo Edge)
 MOTOR_VOZ = (os.environ.get("MOTOR_VOZ") or "gemini").strip().lower()

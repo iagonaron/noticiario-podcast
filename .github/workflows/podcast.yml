@@ -14,6 +14,11 @@ on:
     - cron: "20 6 * * *"   # 07:20 en invierno (UTC+1) · en verano, reintento de las 08:20
     - cron: "20 7 * * *"   # en invierno, reintento de las 08:20
   workflow_dispatch:
+    inputs:
+      modelos_voz:
+        description: "Solo para pruebas: modelos de voz a usar (vacío = los de siempre)"
+        required: false
+        type: string
 
 permissions:
   contents: write          # solo para el «latido» mensual que mantiene viva la programación
@@ -38,6 +43,7 @@ jobs:
       VOZ_A: ${{ vars.VOZ_A }}
       VOZ_B: ${{ vars.VOZ_B }}
       MOTOR_VOZ: ${{ vars.MOTOR_VOZ }}
+      MODELOS_VOZ: ${{ inputs.modelos_voz || vars.MODELOS_VOZ }}
     steps:
       - uses: actions/checkout@v5
 
