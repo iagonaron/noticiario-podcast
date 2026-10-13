@@ -124,6 +124,38 @@ def analizar(urls):
     nota("Análisis de pistas", "\n".join(filas))
 
 
+def describir(urls):
+    """Le pide a Gemini que «escuche» cada pista y diga si sirve de cama de telediario."""
+    import base64
+    import json
+    clave = os.environ.get("GEMINI_API_KEY", "")
+    modelos = (os.environ.get("MODELOS_OIDO") or "gemini-3.6-flash,gemini-3-flash-preview,gemini-3.8-flash").split(",")
+    pregunta = ("Escucha esta pista musical. Responde en español y en una sola línea: género, instrumentos, ambiente, "
+                "tempo aproximado y si serviría como música de fondo continua bajo las voces de un informativo "
+                "de radio o telediario moderno (nota del 1 al 10, y por qué). Empieza por la nota, así: «8/10 · …».")
+    filas = []
+    for url in urls:
+        audio = bajar(url)
+        cuerpo = {"contents": [{"parts": [{"inline_data": {"mime_type": "audio/mpeg",
+                                                         "data": base64.b64encode(audio).decode()}},
+                                          {"text": pregunta}]}]}
+        texto = "?"
+        for m in modelos:
+            req = urllib.request.Request(
+                f"https://generativelanguage.googleapis.com/v1beta/models/{m.strip()}:generateContent",
+                data=json.dumps(cuerpo).encode(), headers={"x-goog-api-key": clave, "Content-Type": "application/json"})
+            try:
+                with urllib.request.urlopen(req, timeout=120) as r:
+                    j = json.loads(r.read())
+                partes = j["candidates"][0]["content"]["parts"]
+                texto = " ".join(p.get("text", "") for p in partes if not p.get("thought")).strip().replace("\n", " ")
+                break
+            except Exception as e:
+                texto = f"error con {m}: {e}"
+        filas.append(f"{url.split('/')[-1]} → {texto[:400]}")
+    nota("Pistas escuchadas por Gemini", "\n".join(filas))
+
+
 def fondo(url):
     """Guarda la pista entera (sin el silencio inicial) como cama musical del programa."""
     from . import dropbox
@@ -167,6 +199,8 @@ if __name__ == "__main__":
     resto = [a for a in sys.argv[2:] if a.strip()]
     if modo == "analizar":
         analizar(resto)
+    elif modo == "describir":
+        describir(resto)
     elif modo == "fondo":
         fondo(resto[0])
     elif modo == "preparar":

@@ -2,6 +2,7 @@
 # carpeta privada del pódcast en Dropbox (/musica), nunca en este repositorio público.
 #   modo listar   → títulos y enlaces de pistas (en «enlaces», páginas de Mixkit; vacío = las de siempre)
 #   modo analizar → duración, tempo y estabilidad de las pistas de «enlaces»
+#   modo describir → Gemini «escucha» las pistas de «enlaces» y dice si sirven de fondo de informativo
 #   modo fondo    → guarda la pista de «enlaces» como cama musical (/musica/fondo.mp3)
 name: Preparar música
 
@@ -9,7 +10,7 @@ on:
   workflow_dispatch:
     inputs:
       modo:
-        description: "listar, analizar o fondo"
+        description: "listar, analizar, describir o fondo"
         required: false
         default: "listar"
         type: string
@@ -29,6 +30,7 @@ jobs:
       DROPBOX_APP_KEY: ${{ secrets.DROPBOX_APP_KEY }}
       DROPBOX_APP_SECRET: ${{ secrets.DROPBOX_APP_SECRET }}
       DROPBOX_REFRESH_TOKEN: ${{ secrets.DROPBOX_REFRESH_TOKEN }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       MODO: ${{ inputs.modo }}
       ENLACES: ${{ inputs.enlaces }}
     steps:
