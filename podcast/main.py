@@ -3,6 +3,7 @@ import json
 import os
 import sys
 import tempfile
+import threading
 import time
 import traceback
 
@@ -112,6 +113,18 @@ def main():
         avisos.append(f"Dropbox: {e}")
         util.log(avisos[-1])
 
+    # 0) el plan del Distinto Básico se busca en paralelo (leer agendas tarda unos minutos)
+    resultado_plan = {}
+
+    def buscar_plan():
+        try:
+            resultado_plan["v"] = plan_del_dia(token, hoy, [])
+        except Exception as e:
+            resultado_plan["error"] = f"{type(e).__name__}: {e}"[:300]
+
+    hilo_plan = threading.Thread(target=buscar_plan, daemon=True)
+    hilo_plan.start()
+
     # 1) noticias
     etapa("noticias")
     datos, av = recoger_noticias(hoy, diag)
@@ -147,23 +160,33 @@ def main():
     except Exception as e:
         avisos.append(f"Festivos: {type(e).__name__}: {e}"[:200])
 
-    # 3) el momento Distinto Básico (propuesta de plan con búsqueda en internet)
-    etapa("Distinto Básico")
-    plan, historial_planes = None, []
-    try:
-        plan, historial_planes, av = plan_del_dia(token, hoy, diag)
-        avisos += av
-    except Exception as e:
-        avisos.append(f"Distinto Básico: {type(e).__name__}: {e}"[:300])
-
-    # 4) la conversación: fecha y lo rápido (plantillas) + lo que escribe la IA + cierre (plantilla)
+    # 3) la conversación: fecha y lo rápido (plantillas) + noticias (IA) + Distinto Básico + cierre
     etapa("guion")
-    segs_ia, info = guion.escribir(ahora, datos, plan)
+    segs_ia, info = guion.escribir(ahora, datos)
     avisos += info.get("avisos", [])
-    if plan:
-        info["plan_fuentes"] = [u for u in ([plan.get("fuente")] + plan.get("fuentes", [])) if u]
     inicio = guion.apertura(ahora) + lo_rapido([texto_dias, texto_agenda, texto_tiempo], "B")
     segs = inicio + segs_ia
+
+    etapa("Distinto Básico")
+    hilo_plan.join(timeout=max(5, config.PLAN_ESPERA_MAX - (time.time() - t0)))
+    plan, historial_planes = None, []
+    if "v" in resultado_plan:
+        plan, historial_planes, av = resultado_plan["v"]
+        avisos += av
+    elif "error" in resultado_plan:
+        avisos.append(f"Distinto Básico: {resultado_plan['error']}")
+    else:
+        avisos.append("Distinto Básico: la propuesta no llegó a tiempo; hoy va sin ella")
+    diag.append(f"Distinto Básico: {'propuesta de ' + plan.get('modelo', '?') if plan else 'sin propuesta'}"
+                + (f" · páginas: {plan.get('lectura')}" if plan else ""))
+    if plan:
+        numero = max([s.get("noticia") or 0 for s in segs_ia] + [0]) + 1
+        primera = "B" if segs[-1]["voz"] == "A" else "A"
+        segs_db, modelo_db, av = guion.escribir_distinto(plan, primera, numero)
+        avisos += av
+        segs += segs_db
+        info["plan_fuentes"] = [u for u in ([plan.get("fuente")] + plan.get("fuentes", [])) if u]
+        diag.append(f"Distinto Básico (guion): {modelo_db} · {len(segs_db)} turnos")
     segs += guion.cierre(segs[-1]["voz"])
     info["palabras"] = sum(util.palabras(s["texto"]) for s in segs)
     util.log(f"Guion: {info.get('modelo')} · {info['palabras']} palabras · {len(segs)} turnos")

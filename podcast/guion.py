@@ -48,16 +48,24 @@ ESQUEMA = {
 }
 
 
-def _objetivo(con_plan):
-    """(mínimo, máximo) de palabras de lo que escribe la IA."""
-    menos = 0 if con_plan else config.REPARTO["distinto"]
-    return config.PALABRAS_MIN - menos, config.PALABRAS_MAX - menos
+def _bloques(datos):
+    """Bloques que hay hoy (si un bloque viene vacío, no se le reservan palabras)."""
+    hay = [b for b in ("titulares", "local", "interes") if datos.get(b)]
+    if datos.get("distinto_basico"):
+        hay.append("distinto")
+    return hay
 
 
-def instrucciones(n_noticias, con_plan):
-    minimo, maximo = _objetivo(con_plan)
-    reparto = (f"titulares {config.REPARTO['titulares']}, local {config.REPARTO['local']}, "
-               f"interes {config.REPARTO['interes']}" + (f", distinto {config.REPARTO['distinto']}" if con_plan else ""))
+def _objetivo(datos):
+    """(mínimo, máximo) de palabras de lo que escribe la IA, según los bloques que hay."""
+    total = sum(config.REPARTO[b] for b in _bloques(datos)) or 600
+    return int(total * 0.9), int(total * 1.1)
+
+
+def instrucciones(n_noticias, con_plan, datos=None):
+    datos = datos or {"titulares": 1, "local": 1, "interes": 1, "distinto_basico": con_plan}
+    minimo, maximo = _objetivo(datos)
+    reparto = ", ".join(f"{b} {config.REPARTO[b]}" for b in _bloques(datos))
     plan = """
 MOMENTO DISTINTO BÁSICO (bloque «distinto», el último)
 - Empieza exactamente con: «Y para terminar, el momento Distinto Básico.»
@@ -127,11 +135,16 @@ class ErrorApi(Exception):
         self.texto = texto
 
 
-def _llamar(modelo, sistema, usuario, con_esquema=True):
+_SIN_PENSAR_CORTO = set()      # modelos que no admiten «thinkingLevel»
+
+
+def _llamar(modelo, sistema, usuario, con_esquema=True, esquema=None):
     clave = os.environ.get("GEMINI_API_KEY", "")
     cfg = {"temperature": 0.85, "responseMimeType": "application/json", "maxOutputTokens": 32000}
     if con_esquema:
-        cfg["responseSchema"] = ESQUEMA
+        cfg["responseSchema"] = esquema or ESQUEMA
+    if config.GUION_PENSAR and modelo not in _SIN_PENSAR_CORTO:
+        cfg["thinkingConfig"] = {"thinkingLevel": config.GUION_PENSAR}
     cuerpo = {
         "systemInstruction": {"parts": [{"text": sistema}]},
         "contents": [{"role": "user", "parts": [{"text": usuario}]}],
@@ -139,6 +152,9 @@ def _llamar(modelo, sistema, usuario, con_esquema=True):
     }
     r = requests.post(URL.format(modelo=modelo), json=cuerpo, timeout=420,
                       headers={"x-goog-api-key": clave, "Content-Type": "application/json"})
+    if r.status_code == 400 and "thinking" in r.text.lower() and "thinkingConfig" in cfg:
+        _SIN_PENSAR_CORTO.add(modelo)
+        return _llamar(modelo, sistema, usuario, con_esquema, esquema)
     if r.status_code != 200:
         raise ErrorApi(r.status_code, r.text)
     j = r.json()
@@ -290,12 +306,12 @@ def escribir(hoy_dt, noticias, plan=None):
     datos = _datos_para_guionista(hoy_dt, noticias, plan)
     n = sum(len(datos[k]) for k in ("titulares", "interes", "local"))
     usuario = "DATOS DE HOY (JSON):\n" + json.dumps(datos, ensure_ascii=False)
-    sistema = instrucciones(n, bool(plan))
+    sistema = instrucciones(n, bool(plan), datos)
     segs, modelo, errores = _pedir_guion(sistema, usuario)
     info["avisos"] += errores
     if segs:
         total = sum(util.palabras(s["texto"]) for s in segs)
-        minimo, maximo = _objetivo(bool(plan))
+        minimo, maximo = _objetivo(datos)
         if total < minimo * 0.8 or total > maximo * 1.2:
             util.log(f"Guion con {total} palabras: pido que lo ajuste")
             usuario2 = usuario + (f"\n\nOJO: tu versión anterior tenía {total} palabras. Ajusta el guion a "
@@ -319,6 +335,58 @@ def escribir(hoy_dt, noticias, plan=None):
     info["dialogo"] = f"{len(segs)} turnos · {unidos} turnos seguidos de la misma voz unidos · {largos} turnos de más de 60 palabras"
     info["palabras"] = sum(util.palabras(s["texto"]) for s in segs)
     return segs, info
+
+
+def _distinto_plantilla(plan, primera, numero):
+    """Por si la IA no responde: el plan contado con frases fijas, alternando voces."""
+    otra = "B" if primera == "A" else "A"
+    frases = [(primera, f"Y para terminar, el momento Distinto Básico: {plan.get('titulo')}."),
+              (otra, str(plan.get("que_es") or "")),
+              (primera, " ".join(x for x in (f"Es {plan['cuando']}" if plan.get("cuando") else "",
+                                              f"en {plan['lugar']}." if plan.get("lugar") else "") if x)),
+              (otra, " ".join(x for x in (f"Precio: {plan['precio']}." if plan.get("precio") else "",
+                                           f"Reserva: {plan['reserva']}." if plan.get("reserva") else "") if x))]
+    comer = plan.get("comer") if isinstance(plan.get("comer"), dict) else None
+    if comer and comer.get("nombre"):
+        frases.append((primera, f"Y para comer cerca, {comer['nombre']}" + (f": {comer['que']}." if comer.get("que") else ".")))
+    return [{"bloque": "distinto", "noticia": numero, "voz": v, "texto": t} for v, t in frases if t.strip()]
+
+
+def escribir_distinto(plan, primera, numero):
+    """El momento Distinto Básico en diálogo (llamada corta aparte). Devuelve (segmentos, modelo, avisos)."""
+    sistema = f"""Escribes el último bloque de un pódcast diario de noticias que escucha Iago en A Coruña: el «momento Distinto Básico», la propuesta de plan de hoy para él y su pareja, Laura.
+- Diálogo entre dos voces que se alternan, empezando por la voz {primera}: entre 4 y 6 turnos, unas {config.REPARTO['distinto']} palabras en total, cada turno de 45 palabras como mucho.
+- El primer turno empieza exactamente con: «Y para terminar, el momento Distinto Básico.»
+- Cuenta: qué es (explicado a quien no lo conoce), cuándo y dónde, cuánto cuesta, si hay que reservar y con cuánta antelación, y dónde comer vegano cerca. Di por qué les puede gustar. Si en «visma» pone true, se puede decir que Visma, su perra, también puede ir.
+- Usa SOLO los datos que te paso: ni fechas, ni horas, ni precios, ni sitios inventados. Si un dato no viene, no lo digas. Las direcciones web no se leen.
+- Español de España, coloquial y natural, de tú; sin saludos, sin nombres de los presentadores, sin despedida. Cifras con letras.
+- Salida: solo el JSON con «segmentos» (bloque «distinto», noticia {numero}, voz A o B, texto)."""
+    datos = {k: v for k, v in plan.items() if k not in ("fuentes", "fuente", "modelo", "lectura")}
+    usuario = "PROPUESTA (JSON):\n" + json.dumps(datos, ensure_ascii=False)
+    avisos = []
+    for modelo in config.MODELOS_TEXTO[:3]:
+        try:
+            texto = _llamar(modelo, sistema, usuario)
+            segs = [s for s in _parsear_todo(texto) if s["texto"]]
+            if len(segs) >= 2:
+                for s in segs:
+                    s["bloque"], s["noticia"] = "distinto", numero
+                segs, _ = _unir_seguidos(segs)
+                return segs, modelo, avisos
+        except Exception as e:
+            avisos.append(f"Distinto Básico (guion) · {modelo}: {str(e)[:160]}")
+    return _distinto_plantilla(plan, primera, numero), "plantilla", avisos
+
+
+def _parsear_todo(texto):
+    texto = re.sub(r"^```(?:json)?\s*|\s*```$", "", texto.strip())
+    j = json.loads(texto)
+    out = []
+    for s in (j.get("segmentos") if isinstance(j, dict) else j) or []:
+        voz = str(s.get("voz", "A")).strip().upper()[:1]
+        t = RE_NOMBRE_DELANTE.sub("", re.sub(r"\s+", " ", str(s.get("texto", ""))).strip())
+        out.append({"bloque": "distinto", "noticia": 0, "voz": voz if voz in ("A", "B") else "A", "texto": t})
+    return out
 
 
 def a_markdown(segs, info, hoy_dt, extra=""):

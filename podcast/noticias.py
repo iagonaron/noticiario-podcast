@@ -134,10 +134,35 @@ def _articulos(html):
 
 
 def _elpais_antes(ctx):
-    """El País Exprés se baja ANTES de abrir el noticiario, con una pestaña de navegador de verdad
-    (El País corta a veces las peticiones «de servidor») y, si no, con una petición directa con
-    cabeceras de navegador. Devuelve (html o None, cómo fue)."""
+    """El País Exprés se baja ANTES de abrir el noticiario, probando varios caminos, porque El País
+    bloquea unas veces las peticiones directas desde los servidores de GitHub y otras las de su
+    proxy de Netlify (13-oct-2026: de noche iba la directa; por la mañana, solo la de Netlify).
+    Devuelve (html o None, cómo fue)."""
+    import urllib.parse
+    import urllib.request
     intentos = []
+
+    def simple(url, nombre):
+        req = urllib.request.Request(url, headers={"User-Agent": util.UA, "Accept-Language": "es-ES,es;q=0.9"})
+        try:
+            with urllib.request.urlopen(req, timeout=25) as r:
+                html = r.read().decode("utf-8", "replace")
+            if _articulos(html) >= 3:
+                return html
+            intentos.append(f"{nombre}: {_articulos(html)} artículos")
+        except Exception as e:
+            intentos.append(f"{nombre}: {str(e)[:40]}")
+        return None
+
+    caminos = [
+        (config.PROXY_NETLIFY + "elpais.com/expres/", "netlify"),
+        (EL_PAIS, "directa"),
+        ("https://api.allorigins.win/raw?url=" + urllib.parse.quote(EL_PAIS, safe=""), "allorigins"),
+    ]
+    for url, nombre in caminos:
+        html = simple(url, nombre)
+        if html:
+            return html, f"{nombre} · {_articulos(html)} artículos" + (f" (antes: {' · '.join(intentos)})" if intentos else "")
     try:
         pg = ctx.new_page()
         resp = pg.goto(EL_PAIS, wait_until="domcontentloaded", timeout=35_000)
@@ -148,20 +173,10 @@ def _elpais_antes(ctx):
         html, estado = pg.content(), (resp.status if resp else 0)
         pg.close()
         if estado < 400 and _articulos(html) >= 3:
-            return html, f"pestaña {estado} · {_articulos(html)} artículos"
-        intentos.append(f"pestaña {estado} · {_articulos(html)} artículos")
+            return html, f"pestaña {estado} · {_articulos(html)} artículos (antes: {' · '.join(intentos)})"
+        intentos.append(f"pestaña {estado}")
     except Exception as e:
         intentos.append(f"pestaña: {type(e).__name__}")
-    import requests
-    for _ in range(2):
-        try:
-            r = requests.get(EL_PAIS, headers=CABECERAS_NAVEGADOR, timeout=25)
-            if r.status_code < 400 and _articulos(r.text) >= 3:
-                return r.text, f"directa {r.status_code} · {_articulos(r.text)} artículos"
-            intentos.append(f"directa {r.status_code}")
-        except Exception as e:
-            intentos.append(f"directa: {type(e).__name__}")
-        time.sleep(3)
     return None, " · ".join(intentos)
 
 

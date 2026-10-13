@@ -133,11 +133,15 @@ def proponer(hoy, criterios, historial):
         return None, ["Distinto Básico: faltan los criterios o la clave de Gemini"]
     urls = fuentes_del_dia(hoy)
     pregunta = _pregunta(hoy, criterios, historial, urls)
+    inicio = time.time()
     for modelo in config.MODELOS_PLANES:
         for intento in range(2):
+            if time.time() - inicio > 330:
+                avisos.append("Distinto Básico: se acabó el tiempo para buscar el plan")
+                return None, avisos
             t0 = time.time()
             try:
-                r = requests.post(URL.format(modelo=modelo), timeout=240,
+                r = requests.post(URL.format(modelo=modelo), timeout=200,
                                   headers={"x-goog-api-key": os.environ["GEMINI_API_KEY"], "Content-Type": "application/json"},
                                   json={"contents": [{"role": "user", "parts": [{"text": pregunta}]}],
                                         "tools": [{"url_context": {}}],

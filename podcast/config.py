@@ -29,9 +29,9 @@ PROB_LLUVIA_FRANJA = 40     # % a partir del cual una hora cuenta como «puede l
 UV_PROTECCION = 3           # índice UV a partir del cual se recomienda protección solar
 
 # ---------------------------------------------------------------- guion
-PALABRAS_MIN = 1550          # lo que escribe la IA (sin lo rápido del principio): unos 12 min en total
-PALABRAS_MAX = 1850
-REPARTO = {"titulares": 750, "local": 300, "interes": 450, "distinto": 170}   # palabras orientativas por bloque
+REPARTO = {"titulares": 900, "local": 330, "interes": 520, "distinto": 170}   # palabras por bloque (unos 12 min en total)
+GUION_PENSAR = os.environ.get("GUION_PENSAR") or "low"   # «low» = el guionista piensa menos y tarda bastante menos
+PLAN_ESPERA_MAX = 420        # segundos desde el inicio que se espera como mucho la propuesta del Distinto Básico
 LOCAL_MAX = 3                # noticias de Coruña y Galicia que entran
 # Momento Distinto Básico: modelos con búsqueda de Google (incluida en el plan gratuito)
 MODELOS_PLANES = [m.strip() for m in (os.environ.get("MODELOS_PLANES") or
