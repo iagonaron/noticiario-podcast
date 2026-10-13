@@ -1,7 +1,8 @@
 # El robot del Noticiario Podcast.
-# GitHub programa en hora universal (UTC), así que salta a tres horas y el propio robot
-# decide (podcast/toca.py): genera a las 7:20 de Madrid, en verano y en invierno, y si
-# esa primera vez falla o GitHub se la salta, la siguiente sirve de reintento.
+# GitHub programa en hora universal (UTC) y a veces se salta o retrasa mucho una cita (el
+# 13-oct-2026 no lanzó la de las 5:20), así que hay varias cada cuarto de hora y el propio
+# robot decide (podcast/toca.py): genera la primera vez que salta a partir de las 7:15 de
+# Madrid, en verano y en invierno, y las demás ven que ya está hecho y no hacen nada.
 #
 # Para pausarlo: pestaña Actions → «Noticiario Podcast» → «···» → Disable workflow.
 # Para probarlo cuando quieras: Actions → «Noticiario Podcast» → Run workflow.
@@ -10,9 +11,8 @@ name: Noticiario Podcast
 
 on:
   schedule:
-    - cron: "20 5 * * *"   # 07:20 en verano (UTC+2)
-    - cron: "20 6 * * *"   # 07:20 en invierno (UTC+1) · en verano, reintento de las 08:20
-    - cron: "20 7 * * *"   # en invierno, reintento de las 08:20
+    - cron: "20,35,50 5,6 * * *"   # verano (UTC+2): 7:20, 7:35, 7:50 y reintentos · invierno (UTC+1): desde las 7:20
+    - cron: "5,20 7 * * *"         # últimos reintentos
   workflow_dispatch:
     inputs:
       modelos_voz:

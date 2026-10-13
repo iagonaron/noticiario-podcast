@@ -225,7 +225,7 @@ def escribir(hoy_dt, noticias):
     info["avisos"] += errores
     if segs:
         total = sum(util.palabras(s["texto"]) for s in segs)
-        if total < config.PALABRAS_MIN * 0.75 or total > config.PALABRAS_MAX * 1.25:
+        if total < config.PALABRAS_MIN * 0.8 or total > config.PALABRAS_MAX * 1.2:
             util.log(f"Guion con {total} palabras: pido que lo ajuste")
             usuario2 = usuario + (f"\n\nOJO: tu versión anterior tenía {total} palabras. Ajusta el guion a "
                                   f"entre {config.PALABRAS_MIN} y {config.PALABRAS_MAX} palabras.")

@@ -15,6 +15,7 @@ CONCELLO = "15030"                   # código de A Coruña en MeteoGalicia y AE
 # Ventana en la que el robot automático puede generar el episodio (hora de Madrid).
 # Fuera de ella solo se genera si lo lanzas tú a mano desde GitHub.
 HORA_MINIMA = 7
+MINUTO_MINIMO = 15        # no empieza antes de las 7:15 (El País Exprés aún puede ser el de ayer)
 HORA_MAXIMA = 11
 
 # Franjas de los paseos (horas de Madrid, la segunda cifra no incluida)
@@ -28,8 +29,8 @@ PROB_LLUVIA_FRANJA = 40     # % a partir del cual una hora cuenta como «puede l
 UV_PROTECCION = 3           # índice UV a partir del cual se recomienda protección solar
 
 # ---------------------------------------------------------------- guion
-PALABRAS_MIN = 1850          # parte conversada (sin lo rápido del principio): 12-15 min en total
-PALABRAS_MAX = 2250
+PALABRAS_MIN = 1800          # parte conversada (sin lo rápido del principio): 12-15 min en total
+PALABRAS_MAX = 2150
 TEXTO_MAX_NOTICIA = 1800     # caracteres de cada noticia que se le pasan al guionista
 
 MODELOS_TEXTO = [m.strip() for m in os.environ.get(
@@ -67,7 +68,7 @@ _MODELOS_VOZ_DEFECTO = ("interactions:gemini-3.8-flash-tts,interactions:gemini-3
                         "generate:gemini-3.1-flash-tts-preview,generate:gemini-2.5-flash-preview-tts")
 MODELOS_VOZ = [tuple(x.strip().split(":", 1)) for x in
                (os.environ.get("MODELOS_VOZ") or _MODELOS_VOZ_DEFECTO).split(",") if ":" in x]
-VOZ_MAX_CARACTERES = int(os.environ.get("VOZ_MAX_CARACTERES") or 3000)   # unas 5 tandas por episodio
+VOZ_MAX_CARACTERES = int(os.environ.get("VOZ_MAX_CARACTERES") or 3800)   # unas 4 tandas por episodio
 VOZ_TIMEOUT = 180            # segundos de espera máxima por petición de voz (si no, otro modelo)
 EDGE_VELOCIDAD = "+4%"
 PIPER_LENTITUD = 0.95        # <1 = algo más rápido

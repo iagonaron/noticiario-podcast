@@ -2,7 +2,7 @@
 
 GitHub programa en hora universal, así que el flujo salta a varias horas y aquí se decide:
 - a mano (FORZAR=si) → siempre;
-- si no, solo entre HORA_MINIMA y HORA_MAXIMA de Madrid y si el MP3 de hoy aún no está en Dropbox.
+- si no, solo entre las 7:15 y las 11:00 de Madrid y si el MP3 de hoy aún no está en Dropbox.
 Así la segunda llamada de la mañana sirve de reintento si la primera falló o GitHub la saltó.
 """
 import datetime as dt
@@ -16,13 +16,16 @@ def decidir():
     ahora = dt.datetime.now(ZoneInfo(config.ZONA))
     if os.environ.get("FORZAR", "no").lower() in ("si", "sí", "true", "1"):
         return True, "lanzado a mano"
-    if not (config.HORA_MINIMA <= ahora.hour < config.HORA_MAXIMA):
+    if not ((config.HORA_MINIMA, config.MINUTO_MINIMO) <= (ahora.hour, ahora.minute) and ahora.hour < config.HORA_MAXIMA):
         return False, f"son las {ahora:%H:%M} en Madrid, fuera de la ventana"
     try:
         token = dropbox.token_acceso()
         meta = dropbox.metadatos(token, config.DROPBOX_MP3)
     except Exception as e:
-        return True, f"no pude mirar Dropbox ({e}); genero por si acaso"
+        # sin poder mirar, solo en la primera cita de la mañana (para no gastar cupo en cada reintento)
+        if (ahora.hour, ahora.minute) < (config.HORA_MINIMA, config.MINUTO_MINIMO + 20):
+            return True, f"no pude mirar Dropbox ({e}); genero por si acaso"
+        return False, f"no pude mirar Dropbox ({e}); no repito"
     if meta and meta.get("client_modified"):
         hecho = dt.datetime.strptime(meta["client_modified"], "%Y-%m-%dT%H:%M:%SZ").replace(
             tzinfo=dt.timezone.utc).astimezone(ZoneInfo(config.ZONA))
