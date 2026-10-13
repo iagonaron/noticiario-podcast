@@ -114,7 +114,10 @@ def analizar(urls):
                 with open(ruta, "wb") as f:
                     f.write(bajar(url))
                 c = _caracteristicas(ruta)
-                filas.append(f"{url.split('/')[-1]} · {c['dur']:.0f}s · {c['bpm']} bpm · {c['lufs']} LUFS · "
+                t = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format_tags=title,artist,genre",
+                                    "-of", "default=nw=1:nk=1", ruta], capture_output=True, text=True).stdout
+                titulo = " / ".join(x.strip() for x in t.splitlines() if x.strip())[:80] or "?"
+                filas.append(f"{url.split('/')[-1]} «{titulo}» · {c['dur']:.0f}s · {c['bpm']} bpm · {c['lufs']} LUFS · "
                              f"LRA {c['lra']} · desv {c['desv_db']} dB · brillo {c['centroide_hz']} Hz")
             except Exception as e:
                 filas.append(f"{url} · error {e}")

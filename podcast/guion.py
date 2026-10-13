@@ -1,9 +1,13 @@
-"""Escribe el guion de las noticias con Gemini (plan gratuito): una conversación entre dos
-locutores, al estilo de los pódcast de NotebookLM, desenfadada y fácil de seguir.
+"""Escribe el guion con Gemini (plan gratuito): un diálogo ágil y constante entre dos voces, sin
+saludos ni nombres, que va directo a las noticias y las cuenta fácil y con desenfado.
 
-- Lo rápido del principio (cumpleaños, festivos, agenda y tiempo) NO pasa por el guionista:
-  se lee con plantillas fijas (main.py), para que no se pueda equivocar ni una hora.
-- Si Gemini no responde, se monta un boletín sencillo sin IA para que el pódcast llegue igual.
+Orden del programa (main.py lo monta):
+  apertura y lo rápido (plantillas fijas, sin IA): «Hoy es…», cumpleaños y festivos, agenda, tiempo
+  → titulares (El País Exprés) → local (3 noticias) → interes (ciencia, salud, economía…)
+  → distinto (el momento Distinto Básico) → cierre (plantilla)
+Cada turno lleva el número de la noticia a la que pertenece: entre una noticia y la siguiente
+el montaje sube la música unos segundos.
+Si Gemini no responde, se monta un boletín sencillo sin IA para que el pódcast llegue igual.
 """
 import json
 import os
@@ -15,7 +19,11 @@ import requests
 from . import config, util
 
 URL = "https://generativelanguage.googleapis.com/v1beta/models/{modelo}:generateContent"
-BLOQUES = ["apertura", "portada", "interes", "local", "cierre"]
+BLOQUES = ["titulares", "local", "interes", "distinto"]          # lo que escribe la IA
+ORDEN = ["apertura", "rapido", "titulares", "local", "interes", "distinto", "cierre"]
+TITULOS = {"apertura": "Hoy", "rapido": "Lo rápido del día", "titulares": "Titulares",
+           "local": "Coruña y Galicia", "interes": "Ciencia, salud y economía",
+           "distinto": "Momento Distinto Básico", "cierre": "Cierre"}
 _NOMBRES = sorted({n for v in config.LOCUTORES.values() for n in (v["nombre"], util.sin_tildes(v["nombre"]))} | {"A", "B"})
 RE_NOMBRE_DELANTE = re.compile(r"^(?:" + "|".join(map(re.escape, _NOMBRES)) + r")\s*:\s+")
 
@@ -28,10 +36,11 @@ ESQUEMA = {
                 "type": "OBJECT",
                 "properties": {
                     "bloque": {"type": "STRING", "enum": BLOQUES},
+                    "noticia": {"type": "INTEGER"},
                     "voz": {"type": "STRING", "enum": ["A", "B"]},
                     "texto": {"type": "STRING"},
                 },
-                "required": ["bloque", "voz", "texto"],
+                "required": ["bloque", "noticia", "voz", "texto"],
             },
         }
     },
@@ -39,58 +48,74 @@ ESQUEMA = {
 }
 
 
-def instrucciones(n_noticias):
-    a = config.LOCUTORES["A"]["nombre"]
-    b = config.LOCUTORES["B"]["nombre"]
-    return f"""Escribes el guion de «El Noticiario de Iago», un pódcast diario y privado que escucha una sola persona, Iago, mientras pasea a su perra a primera hora por A Coruña.
+def _objetivo(con_plan):
+    """(mínimo, máximo) de palabras de lo que escribe la IA."""
+    menos = 0 if con_plan else config.REPARTO["distinto"]
+    return config.PALABRAS_MIN - menos, config.PALABRAS_MAX - menos
 
-FORMATO: UNA CONVERSACIÓN, NO UN TELEDIARIO
-- Es una charla entre dos presentadores, {a} (voz A) y {b} (voz B), al estilo de los pódcast de NotebookLM: se hablan entre ellos y le cuentan las noticias a Iago, al que tratan de tú.
-- Turnos cortos y vivos: casi siempre de 1 a 3 frases. Nunca más de 70 palabras seguidas de la misma voz. Alternan constantemente.
-- Uno cuenta la noticia y el otro hace las preguntas que se haría cualquiera («¿y eso en qué me afecta?», «a ver, explícame eso»), reacciona («¡no me digas!», «ojo con esto»), resume o pone un ejemplo. Van turnándose ese papel.
-- Español de España, coloquial y natural, de tú. Desenfadado, con humor ligero cuando cuadre, pero sin pasarse: nada de chistes malos, risas escritas, gritos ni exageraciones.
-- Que se entienda TODO a la primera: palabras sencillas, comparaciones con la vida diaria, cifras redondeadas («casi el doble», «unos 160.000»), siglas explicadas, nada de jerga. Si algo es técnico, se explica como a un amigo.
+
+def instrucciones(n_noticias, con_plan):
+    minimo, maximo = _objetivo(con_plan)
+    reparto = (f"titulares {config.REPARTO['titulares']}, local {config.REPARTO['local']}, "
+               f"interes {config.REPARTO['interes']}" + (f", distinto {config.REPARTO['distinto']}" if con_plan else ""))
+    plan = """
+MOMENTO DISTINTO BÁSICO (bloque «distinto», el último)
+- Empieza exactamente con: «Y para terminar, el momento Distinto Básico.»
+- Es la propuesta de plan de hoy para Iago y su pareja, Laura (viene en «distinto_basico»). Contadla entre los dos, en diálogo, en 4 a 6 turnos (unas 170 palabras): qué es, explicado a quien no lo conoce; cuándo y dónde; cuánto cuesta; si hay que reservar y con cuánta antelación; y dónde comer vegano cerca. Aquí sí podéis decir por qué les puede gustar.
+- Usa SOLO lo que viene en «distinto_basico»: ni fechas, ni horas, ni precios, ni sitios inventados. Si un dato no viene, no lo digas. Las direcciones web no se leen.
+""" if con_plan else ""
+    return f"""Escribes el guion de un pódcast diario de noticias que escucha una sola persona, Iago, por la mañana en A Coruña.
+
+FORMATO: DIÁLOGO CONSTANTE ENTRE DOS VOCES
+- Dos presentadores, voz A y voz B, que se reparten cada noticia en diálogo, al estilo de los pódcast de NotebookLM. Le hablan a Iago de tú.
+- NO se presentan, NO se saludan, NO dicen sus nombres ni el de Iago y NO se despiden: el programa ya tiene su entrada y su salida. Empezad directamente con la primera noticia.
+- Diálogo SIEMPRE: cada noticia la cuentan entre los dos, alternando la voz en cada turno (A, B, A, B…). Nunca dos turnos seguidos de la misma voz, nunca más de 45 palabras en un turno y ninguna noticia contada por una voz sola.
+- Uno cuenta y el otro pregunta lo que se preguntaría cualquiera («¿y eso en qué me afecta?», «a ver, explícame eso»), reacciona («¡no me digas!», «ojo con esto»), resume o pone un ejemplo. Se van turnando ese papel.
+- Español de España, coloquial y natural. Desenfadado, con humor ligero cuando cuadre, sin pasarse: nada de chistes malos, risas escritas, gritos ni exageraciones.
+- Que se entienda TODO a la primera: palabras sencillas, comparaciones con la vida diaria, cifras redondeadas («casi el doble», «unos ciento sesenta mil»), siglas explicadas, nada de jerga.
+- Escribe las cifras con letras, tal como se dicen («dos mil veintiséis», «el veinticinco por ciento»).
 - Escribe solo lo que se dice: sin acotaciones, sin nombres delante, sin paréntesis, sin enlaces, sin listas, sin emojis.
-- No des por hecho los gustos, costumbres o lo que come o hace Iago, ni le digas qué le va a interesar («esto para tus desayunos», «apúntatelo para luego»): cuenta la noticia y que él saque sus conclusiones.
-- El paseo y la perra, como mucho una vez en todo el programa (en el saludo); en la despedida, no.
+- No des por hecho los gustos, costumbres o planes de Iago ni le digas qué le va a interesar{" (salvo en el momento Distinto Básico, que es para eso)" if con_plan else ""}. Nada de perros, paseos ni desayunos.
 
-BLOQUES, EN ESTE ORDEN
-1. apertura: 2 a 4 turnos muy cortos. Saludan a Iago y entre ellos, con el día de la semana y la fecha, y dan paso a «lo rápido del día». Justo después, el programa pone sin ti los cumpleaños, festivos, agenda y tiempo, así que NO hables de eso.
-2. portada: empieza con un enlace del tipo «Y ahora sí, las noticias». Las de la portada de El País Exprés.
-3. interes: ciencia, tecnología e IA, economía, investigación y salud y longevidad. Si hay alertas sanitarias, se dicen claras al final de este bloque; si no hay, ni se mencionan.
-4. local: A Coruña y Galicia.
-5. cierre: 2 a 4 turnos. Si en «madrid» pone que jugó, dicen solo que jugó (contra quién, si viene; cuándo, solo si viene «cuando», y si no, sin decir ni «anoche» ni «ayer») y que tiene el resumen en el noticiario. Despedida breve y con buen rollo.
+BLOQUES, EN ESTE ORDEN (antes, el programa ya dice la fecha, los cumpleaños, la agenda y el tiempo: no hables de eso)
+1. titulares: las noticias de «titulares» (la portada de El País Exprés). Empieza directamente con la primera, sin preámbulos.
+2. local: las noticias de «local» (A Coruña y Galicia), con un enlace muy corto al empezar («Y aquí, en Coruña…»).
+3. interes: las de «interes» (ciencia, salud, economía, tecnología…). Si hay alertas sanitarias, se dicen claras al final de este bloque; si no hay, ni se mencionan.{chr(10) + "4. distinto: el momento Distinto Básico." if con_plan else ""}
+Entre una noticia y la siguiente sonará una ráfaga de música, así que no hacen falta frases de enlace del tipo «cambiando de tema».
 
 QUÉ CONTAR
-- Cuenta TODAS las noticias que te paso ({n_noticias} en total), salvo las repetidas, las que sean solo del tiempo y las de resultados del Madrid.
+- Cuenta TODAS las noticias que te paso ({n_noticias} en total), salvo las repetidas y las que sean solo del tiempo.
 - Para cada noticia: qué ha pasado, explicado fácil; por qué importa o en qué le afecta a una persona normal; y, si lo hay, un detalle curioso o qué va a pasar ahora.
-- Las 3 o 4 más importantes del día, con más calma (de 6 a 10 turnos). El resto, más rápidas (de 2 a 4 turnos).
-- Usa SOLO la información que te paso. No inventes datos, nombres, cifras, fechas ni declaraciones. El contexto general que añadas para explicar, que sea muy conocido y prudente.
-- Las noticias que estén en gallego, cuéntalas en castellano.
-- Real Madrid: NUNCA digas resultados, marcadores, goles ni quién ganó, aunque salgan en alguna noticia: Iago ve los resúmenes después y no quiere spoilers.
-- Los cambios de bloque, dentro de la conversación («Vale, y ahora cosas de aquí, de Coruña…»), sin repetir siempre la misma fórmula.
+- Las 2 o 3 más importantes del día, con algo más de calma (4 a 6 turnos). El resto, resumidas (2 o 3 turnos).
+- Usa SOLO la información que te paso. No inventes datos, nombres, cifras, fechas ni declaraciones.
+- Las noticias en gallego, cuéntalas en castellano.
+- Deportes: NUNCA digas resultados, marcadores, goles ni quién ganó.
+{plan}
+NUMERACIÓN
+- Cada turno lleva «noticia»: el número de la noticia que se está contando, empezando por 1 y siguiendo en orden por todo el programa (los titulares 1, 2, 3…, y local e interes siguen la cuenta). Todos los turnos de una misma noticia llevan el mismo número.{" El momento Distinto Básico es la última." if con_plan else ""}
 
 LONGITUD
-- Entre {config.PALABRAS_MIN} y {config.PALABRAS_MAX} palabras en total (el programa entero dura de 12 a 15 minutos). Reparto orientativo: apertura 50, portada 820, interes 600, local 560, cierre 60.
+- Entre {minimo} y {maximo} palabras en total: el programa entero dura unos 12 minutos. Reparto orientativo: {reparto}. Mejor quedarse algo corto que largo.
 
 SALIDA
-- Solo el JSON con la lista «segmentos»: cada turno es un segmento con «bloque», «voz» (A o B) y «texto» (exactamente lo que se dice)."""
+- Solo el JSON con «segmentos»: cada turno con «bloque», «noticia», «voz» (A o B) y «texto» (exactamente lo que se dice)."""
 
 
-def _datos_para_guionista(hoy_dt, noticias):
+def _datos_para_guionista(hoy_dt, noticias, plan=None):
     def items(lista):
         return [{"titulo": it["titulo"], "fuente": it.get("fuente", ""), "categoria": it.get("categoria", ""),
                  "texto": util.quitar_url(it.get("texto", ""))[:config.TEXTO_MAX_NOTICIA]}
                 for it in (lista or [])]
-    return {
+    datos = {
         "fecha": util.fecha_larga(hoy_dt) + f" de {hoy_dt.year}",
-        "presentadores": {k: v["nombre"] for k, v in config.LOCUTORES.items()},
-        "portada": items(noticias.get("portada")),
+        "titulares": items(noticias.get("portada")),
+        "local": items((noticias.get("local") or [])[:config.LOCAL_MAX]),
         "interes": items(noticias.get("interes")),
-        "local": items(noticias.get("local")),
         "alertas_sanitarias": noticias.get("alertas_sanitarias") or [],
-        "madrid": noticias.get("madrid") or {"jugo": False},
     }
+    if plan:
+        datos["distinto_basico"] = {k: v for k, v in plan.items() if k not in ("fuentes", "fuente")}
+    return datos
 
 
 class ErrorApi(Exception):
@@ -127,16 +152,21 @@ def _parsear(texto):
     texto = re.sub(r"^```(?:json)?\s*|\s*```$", "", texto.strip())
     j = json.loads(texto)
     segs = j.get("segmentos") if isinstance(j, dict) else j
-    limpios = []
+    limpios, ultima = [], 1
     for s in segs or []:
         bloque = str(s.get("bloque", "")).strip().lower()
+        if bloque == "portada":
+            bloque = "titulares"
         voz = str(s.get("voz", "A")).strip().upper()[:1]
         t = re.sub(r"\s+", " ", str(s.get("texto", ""))).strip()
-        # por si se cuela «Lucía:» delante del texto
-        t = RE_NOMBRE_DELANTE.sub("", t)
+        t = RE_NOMBRE_DELANTE.sub("", t)          # por si se cuela «Lucía:» delante del texto
         if bloque not in BLOQUES or not t:
             continue
-        limpios.append({"bloque": bloque, "voz": voz if voz in ("A", "B") else "A", "texto": t})
+        try:
+            ultima = int(s.get("noticia", ultima))
+        except (TypeError, ValueError):
+            pass
+        limpios.append({"bloque": bloque, "noticia": ultima, "voz": voz if voz in ("A", "B") else "A", "texto": t})
     if len(limpios) < 6:
         raise ValueError("el guion no trae turnos suficientes")
     return limpios
@@ -194,41 +224,81 @@ def _sin_spoilers(texto):
     return " ".join(buenas).strip()
 
 
-def guion_sin_ia(hoy_dt, noticias):
-    """Boletín de reserva, sin Gemini: titulares con su primera frase, alternando voces."""
-    def primera(t):
-        f = re.split(r"(?<=[.!?])\s+", t or "")
-        return f[0] if f and len(f[0]) > 30 else (t or "")[:240]
-
-    segs = [{"bloque": "apertura", "voz": "A", "texto": f"Buenos días, Iago. Es {util.fecha_larga(hoy_dt)}."},
-            {"bloque": "apertura", "voz": "B", "texto": "Hoy toca un resumen más corto de lo normal. Vamos con lo rápido del día."}]
-    voz = "A"
-    for bloque, intro in (("portada", "Y ahora, las noticias."), ("interes", "Más cosas de interés."),
-                          ("local", "Y en Coruña y Galicia.")):
-        lista = noticias.get(bloque) or []
-        for k, it in enumerate(lista):
-            texto = (intro + " " if k == 0 else "") + f"{it['titulo']}. {primera(it.get('texto', ''))}"
-            segs.append({"bloque": bloque, "voz": voz, "texto": texto})
-            voz = "B" if voz == "A" else "A"
-    segs.append({"bloque": "cierre", "voz": voz, "texto": "Esto ha sido todo por hoy. ¡Que tengas un buen día!"})
+def _ordenar_y_numerar(segs):
+    """Bloques en su orden; dentro de cada bloque, el orden del guionista. Números de noticia
+    consecutivos (1, 2, 3…) para que el montaje sepa dónde empieza cada una."""
+    segs = sorted(segs, key=lambda s: BLOQUES.index(s["bloque"]))
+    n, previa = 0, None
+    for s in segs:
+        clave = (s["bloque"], s["noticia"])
+        if clave != previa:
+            n += 1
+            previa = clave
+        s["noticia"] = n
     return segs
 
 
-def escribir(hoy_dt, noticias):
-    """Devuelve (segmentos, info) de la parte conversada (apertura, noticias y cierre)."""
+def _unir_seguidos(segs):
+    """Si el guionista pone dos turnos seguidos de la misma voz en la misma noticia, se unen
+    (y el aviso queda en el diagnóstico)."""
+    salida, unidos = [], 0
+    for s in segs:
+        p = salida[-1] if salida else None
+        if p and p["voz"] == s["voz"] and p["noticia"] == s["noticia"] and p["bloque"] == s["bloque"]:
+            p["texto"] = p["texto"] + " " + s["texto"]
+            unidos += 1
+        else:
+            salida.append(dict(s))
+    return salida, unidos
+
+
+def guion_sin_ia(hoy_dt, noticias):
+    """Boletín de reserva, sin Gemini: cada noticia, entre las dos voces (título y primera frase)."""
+    def frases(t):
+        return [f for f in re.split(r"(?<=[.!?])\s+", t or "") if len(f) > 25]
+
+    segs, n = [], 0
+    for bloque, clave in (("titulares", "portada"), ("local", "local"), ("interes", "interes")):
+        lista = noticias.get(clave) or []
+        if bloque == "local":
+            lista = lista[:config.LOCAL_MAX]
+        for it in lista:
+            n += 1
+            f = frases(util.quitar_url(it.get("texto", "")))
+            segs.append({"bloque": bloque, "noticia": n, "voz": "A", "texto": f"{it['titulo']}."})
+            if f:
+                segs.append({"bloque": bloque, "noticia": n, "voz": "B", "texto": " ".join(f[:2])[:400]})
+    return segs
+
+
+def apertura(hoy_dt):
+    return [{"bloque": "apertura", "noticia": 0, "voz": "A", "texto": f"Hoy es {util.fecha_larga(hoy_dt)}."}]
+
+
+def cierre(ultima_voz="B"):
+    a = "A" if ultima_voz == "B" else "B"
+    b = "B" if a == "A" else "A"
+    return [{"bloque": "cierre", "noticia": 999, "voz": a, "texto": "Y esto ha sido todo por hoy."},
+            {"bloque": "cierre", "noticia": 999, "voz": b, "texto": "¡Hasta mañana!"}]
+
+
+def escribir(hoy_dt, noticias, plan=None):
+    """Devuelve (segmentos, info) de la parte que escribe la IA: titulares, local, interés y,
+    si hay propuesta, el momento Distinto Básico."""
     info = {"modelo": None, "avisos": []}
-    datos = _datos_para_guionista(hoy_dt, noticias)
-    n = sum(len(datos[k]) for k in ("portada", "interes", "local"))
+    datos = _datos_para_guionista(hoy_dt, noticias, plan)
+    n = sum(len(datos[k]) for k in ("titulares", "interes", "local"))
     usuario = "DATOS DE HOY (JSON):\n" + json.dumps(datos, ensure_ascii=False)
-    sistema = instrucciones(n)
+    sistema = instrucciones(n, bool(plan))
     segs, modelo, errores = _pedir_guion(sistema, usuario)
     info["avisos"] += errores
     if segs:
         total = sum(util.palabras(s["texto"]) for s in segs)
-        if total < config.PALABRAS_MIN * 0.8 or total > config.PALABRAS_MAX * 1.2:
+        minimo, maximo = _objetivo(bool(plan))
+        if total < minimo * 0.8 or total > maximo * 1.2:
             util.log(f"Guion con {total} palabras: pido que lo ajuste")
             usuario2 = usuario + (f"\n\nOJO: tu versión anterior tenía {total} palabras. Ajusta el guion a "
-                                  f"entre {config.PALABRAS_MIN} y {config.PALABRAS_MAX} palabras.")
+                                  f"entre {minimo} y {maximo} palabras.")
             segs2, modelo2, err2 = _pedir_guion(sistema, usuario2)
             info["avisos"] += err2
             if segs2:
@@ -239,31 +309,30 @@ def escribir(hoy_dt, noticias):
         info["modelo"] = "plantilla (sin IA)"
         segs = guion_sin_ia(hoy_dt, noticias)
 
-    # orden de bloques respetando el orden de los turnos dentro de cada bloque
-    segs = sorted(segs, key=lambda s: BLOQUES.index(s["bloque"]))
-    if not segs or segs[0]["bloque"] != "apertura":
-        segs.insert(0, {"bloque": "apertura", "voz": "A",
-                        "texto": f"¡Buenos días, Iago! Es {util.fecha_larga(hoy_dt)}. Vamos con lo rápido del día."})
     for s in segs:
         s["texto"] = _sin_spoilers(s["texto"])
     segs = [s for s in segs if s["texto"]]
+    segs = _ordenar_y_numerar(segs)
+    segs, unidos = _unir_seguidos(segs)
+    largos = sum(1 for s in segs if util.palabras(s["texto"]) > 60)
+    info["dialogo"] = f"{len(segs)} turnos · {unidos} turnos seguidos de la misma voz unidos · {largos} turnos de más de 60 palabras"
     info["palabras"] = sum(util.palabras(s["texto"]) for s in segs)
     return segs, info
 
 
 def a_markdown(segs, info, hoy_dt, extra=""):
     nombres = {k: v["nombre"] for k, v in config.LOCUTORES.items()}
-    titulos = {"apertura": "Apertura", "rapido": "Lo rápido del día", "portada": "Portada",
-               "interes": "De interés", "local": "Coruña y Galicia", "cierre": "Cierre"}
     lineas = [f"# Noticiario de Iago · {util.fecha_larga(hoy_dt)}", "",
               f"_Guion: {info.get('modelo')} · {info.get('palabras', 0)} palabras_{extra}", ""]
     actual = None
     for s in segs:
         if s["bloque"] != actual:
-            lineas += ["", f"## {titulos.get(s['bloque'], s['bloque'].capitalize())}", ""]
+            lineas += ["", f"## {TITULOS.get(s['bloque'], s['bloque'].capitalize())}", ""]
             actual = s["bloque"]
         lineas.append(f"**{nombres.get(s['voz'], s['voz'])}:** {s['texto']}")
         lineas.append("")
+    if info.get("plan_fuentes"):
+        lineas += ["", "---", "", "### Fuentes del momento Distinto Básico", ""] + [f"- {u}" for u in info["plan_fuentes"]]
     if info.get("avisos"):
         lineas += ["", "---", "", "### Avisos de la generación", ""] + [f"- {a}" for a in info["avisos"]]
     return "\n".join(lineas)
