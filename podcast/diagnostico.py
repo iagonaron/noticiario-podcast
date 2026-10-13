@@ -133,6 +133,39 @@ def planes():
                             f"criterios {'de Dropbox' if crit else 'genéricos'} · avisos: {avisos}"[:3000])
 
 
+def busqueda():
+    """¿Qué herramientas de búsqueda deja usar el plan gratuito? (solo datos técnicos)"""
+    import os
+    import requests
+    clave = os.environ.get("GEMINI_API_KEY", "")
+    cab = {"x-goog-api-key": clave, "Content-Type": "application/json"}
+    pregunta = "¿Qué conciertos hay en A Coruña esta semana? Responde en dos líneas."
+    pruebas = [
+        ("generate · google_search", "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent",
+         {"contents": [{"parts": [{"text": pregunta}]}], "tools": [{"google_search": {}}]}),
+        ("interactions · google_search", "https://generativelanguage.googleapis.com/v1beta/interactions",
+         {"model": "gemini-3.8-flash", "input": pregunta, "tools": [{"type": "google_search"}]}),
+        ("generate · url_context", "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent",
+         {"contents": [{"parts": [{"text": "Resume en dos líneas qué eventos hay en https://www.coruna.gal/cultura/es/agenda"}]}],
+          "tools": [{"url_context": {}}]}),
+        ("generate · google_search · 2.5-flash", "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+         {"contents": [{"parts": [{"text": pregunta}]}], "tools": [{"google_search": {}}]}),
+    ]
+    for nombre, url, cuerpo in pruebas:
+        t0 = time.time()
+        try:
+            r = requests.post(url, json=cuerpo, headers=cab, timeout=120)
+            texto = r.text
+            if r.status_code == 200:
+                j = r.json()
+                fuentes = len(re.findall(r'"uri"', texto))
+                nota(f"Búsqueda {nombre}", f"OK en {time.time() - t0:.0f}s · {fuentes} enlaces de fuentes · {len(texto)} bytes")
+            else:
+                nota(f"Búsqueda {nombre}", f"HTTP {r.status_code} en {time.time() - t0:.0f}s · {texto[:1800]}", "warning")
+        except Exception as e:
+            nota(f"Búsqueda {nombre}", f"FALLO {e}", "warning")
+
+
 def guion():
     from . import guion as g, util
     falsas = {"portada": [{"titulo": f"Noticia de prueba {i}", "fuente": "Prueba", "categoria": "",
@@ -149,6 +182,6 @@ if __name__ == "__main__":
     for prueba in (sys.argv[1:] or ["elpais"]):
         try:
             {"elpais": elpais, "noticias": noticias, "voz": voz, "guion": guion, "edge": edge,
-             "piper": piper, "vozlarga": vozlarga, "planes": planes}[prueba]()
+             "piper": piper, "vozlarga": vozlarga, "planes": planes, "busqueda": busqueda}[prueba]()
         except Exception as e:
             nota(f"Diagnóstico {prueba}", traceback.format_exc()[-1500:], "warning")
