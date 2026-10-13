@@ -1,13 +1,14 @@
-"""Sintonía de biblioteca libre (Mixkit: uso gratuito en proyectos propios, sin atribución).
+"""Música de biblioteca libre (Mixkit: uso gratuito en proyectos propios, sin atribución).
 
-    python -m podcast.musica_libre listar           → anotaciones con títulos y enlaces de pistas
-    python -m podcast.musica_libre preparar URL     → recorta entrada y cierre y los deja en Dropbox /musica
+    python -m podcast.musica_libre listar [PÁGINA…]   → anotaciones con títulos y enlaces de pistas
+    python -m podcast.musica_libre analizar URL…      → duración, tempo, sonoridad y lo estable que es cada pista
+    python -m podcast.musica_libre fondo URL          → guarda la pista entera como cama musical (Dropbox /musica/fondo.mp3)
+    python -m podcast.musica_libre preparar URL       → (antiguo) recorta entrada y cierre en Dropbox /musica
 
 La música NO se guarda en este repositorio público (la licencia no permite redistribuir las
 pistas sueltas): vive solo en la carpeta privada del pódcast en Dropbox.
 """
 import html as htmlmod
-import io
 import os
 import re
 import subprocess
@@ -17,9 +18,10 @@ import urllib.request
 
 UA = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/128.0 Safari/537.36")
-PAGINAS = ["https://mixkit.co/free-stock-music/tag/intro/",
-           "https://mixkit.co/free-stock-music/mood/happy/",
-           "https://mixkit.co/free-stock-music/tag/podcast/"]
+PAGINAS = ["https://mixkit.co/free-stock-music/tag/news/",
+           "https://mixkit.co/free-stock-music/tag/corporate/",
+           "https://mixkit.co/free-stock-music/tag/technology/",
+           "https://mixkit.co/free-stock-music/tag/business/"]
 
 
 def nota(titulo, texto):
@@ -33,8 +35,8 @@ def bajar(url):
         return r.read()
 
 
-def listar():
-    for pag in PAGINAS:
+def listar(paginas=None):
+    for pag in (paginas or PAGINAS):
         try:
             html = bajar(pag).decode("utf-8", "replace")
         except Exception as e:
@@ -48,8 +50,9 @@ def listar():
             titulos = re.findall(r"(?:title|aria-label|data-title)=\"([^\"]{3,80})\"", trozo)
             h = re.findall(r"<h\d[^>]*>\s*(?:<a[^>]*>)?\s*([^<]{3,80})<", trozo)
             nombre = htmlmod.unescape((h[-1] if h else (titulos[-1] if titulos else "?")).strip())
-            filas.append(f"{nombre} | {u}")
-        nota(f"Mixkit {pag.split('/')[-2]} ({len(filas)})", "\n".join(filas) or html[:1500])
+            dur = re.findall(r"\b(\d{1,2}:\d{2})\b", html[i:i + 3000])
+            filas.append(f"{nombre} | {dur[0] if dur else '?'} | {u}")
+        nota(f"Mixkit {pag.rstrip('/').split('/')[-1]} ({len(filas)})", "\n".join(filas) or html[:1500])
 
 
 def _ffmpeg(*args):
@@ -70,6 +73,71 @@ def _duracion(ruta):
     return float(r.stdout.strip() or 0)
 
 
+def _caracteristicas(ruta):
+    """Duración, sonoridad integrada, rango de sonoridad (LRA: cuanto más bajo, más estable), tempo
+    aproximado y brillo (centroide espectral), para elegir una cama musical sin oírla."""
+    import numpy as np
+    dur = _duracion(ruta)
+    r = subprocess.run(["ffmpeg", "-hide_banner", "-nostats", "-i", ruta, "-af", "ebur128", "-f", "null", "-"],
+                       capture_output=True, text=True)
+    integ = re.findall(r"I:\s+(-?[\d.]+) LUFS", r.stderr)
+    lra = re.findall(r"LRA:\s+([\d.]+) LU", r.stderr)
+    pcm = subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-i", ruta, "-ac", "1", "-ar", "22050",
+                          "-f", "s16le", "-"], capture_output=True, check=True).stdout
+    x = np.frombuffer(pcm, np.int16).astype(np.float32) / 32768.0
+    hop, win = 512, 2048
+    n = max(1, (len(x) - win) // hop)
+    frames = np.lib.stride_tricks.as_strided(x, shape=(n, win), strides=(x.strides[0] * hop, x.strides[0]))
+    espec = np.abs(np.fft.rfft(frames * np.hanning(win), axis=1))
+    flujo = np.maximum(0, np.diff(espec, axis=0)).sum(axis=1)
+    flujo = (flujo - flujo.mean()) / (flujo.std() + 1e-9)
+    ac = np.correlate(flujo, flujo, mode="full")[len(flujo) - 1:]
+    fps = 22050 / hop
+    lags = np.arange(len(ac))
+    validos = (lags >= fps * 60 / 180) & (lags <= fps * 60 / 60)
+    bpm = 60 * fps / lags[validos][np.argmax(ac[validos])] if validos.any() else 0
+    freqs = np.fft.rfftfreq(win, 1 / 22050)
+    centroide = float((espec * freqs).sum() / (espec.sum() + 1e-9))
+    # estabilidad: desviación de la energía en ventanas de 3 s (dB)
+    v = int(22050 * 3)
+    energias = [20 * np.log10(np.sqrt(np.mean(x[i:i + v] ** 2)) + 1e-9) for i in range(0, max(1, len(x) - v), v)]
+    return {"dur": dur, "lufs": float(integ[-1]) if integ else None, "lra": float(lra[-1]) if lra else None,
+            "bpm": round(float(bpm)), "centroide_hz": round(centroide), "desv_db": round(float(np.std(energias)), 1)}
+
+
+def analizar(urls):
+    filas = []
+    with tempfile.TemporaryDirectory() as tmp:
+        for k, url in enumerate(urls):
+            ruta = os.path.join(tmp, f"p{k}.mp3")
+            try:
+                with open(ruta, "wb") as f:
+                    f.write(bajar(url))
+                c = _caracteristicas(ruta)
+                filas.append(f"{url.split('/')[-1]} · {c['dur']:.0f}s · {c['bpm']} bpm · {c['lufs']} LUFS · "
+                             f"LRA {c['lra']} · desv {c['desv_db']} dB · brillo {c['centroide_hz']} Hz")
+            except Exception as e:
+                filas.append(f"{url} · error {e}")
+    nota("Análisis de pistas", "\n".join(filas))
+
+
+def fondo(url):
+    """Guarda la pista entera (sin el silencio inicial) como cama musical del programa."""
+    from . import dropbox
+    token = dropbox.token_acceso()
+    with tempfile.TemporaryDirectory() as tmp:
+        orig = os.path.join(tmp, "pista.mp3")
+        with open(orig, "wb") as f:
+            f.write(bajar(url))
+        t0 = _inicio_sonoro(orig)
+        sal = os.path.join(tmp, "fondo.mp3")
+        _ffmpeg("-ss", f"{t0:.2f}", "-i", orig, "-ac", "2", "-b:a", "192k", sal)
+        with open(sal, "rb") as f:
+            dropbox.subir(token, "/musica/fondo.mp3", f.read())
+        c = _caracteristicas(sal)
+        nota("Cama musical guardada", f"{c} · origen {url}")
+
+
 def preparar(url, intro_seg=11.0, cierre_seg=9.0):
     from . import dropbox
     token = dropbox.token_acceso()
@@ -81,21 +149,24 @@ def preparar(url, intro_seg=11.0, cierre_seg=9.0):
         t0 = _inicio_sonoro(orig)
         intro = os.path.join(tmp, "intro.mp3")
         cierre = os.path.join(tmp, "cierre.mp3")
-        # entrada: los primeros segundos con música, bajando al final para que entren las voces
         _ffmpeg("-ss", f"{t0:.2f}", "-t", f"{intro_seg}", "-i", orig, "-af",
                 f"afade=t=in:d=0.3,afade=t=out:st={intro_seg - 3.5}:d=3.5", "-ac", "2", "-b:a", "192k", intro)
-        # cierre: el final natural de la pista
         st = max(0.0, dur - cierre_seg)
         _ffmpeg("-ss", f"{st:.2f}", "-i", orig, "-af", "afade=t=in:d=1.2", "-ac", "2", "-b:a", "192k", cierre)
         for nombre, ruta in (("intro.mp3", intro), ("cierre.mp3", cierre)):
             with open(ruta, "rb") as f:
                 dropbox.subir(token, f"/musica/{nombre}", f.read())
-        nota("Música preparada", f"pista de {dur:.0f}s (empieza a sonar en {t0:.1f}s) · entrada {intro_seg:.0f}s y "
-                                 f"cierre {cierre_seg:.0f}s subidos a Dropbox /musica · origen {url}")
+        nota("Música preparada", f"pista de {dur:.0f}s · entrada {intro_seg:.0f}s y cierre {cierre_seg:.0f}s · origen {url}")
 
 
 if __name__ == "__main__":
-    if len(sys.argv) >= 3 and sys.argv[1] == "preparar":
-        preparar(sys.argv[2])
+    modo = sys.argv[1] if len(sys.argv) > 1 else "listar"
+    resto = [a for a in sys.argv[2:] if a.strip()]
+    if modo == "analizar":
+        analizar(resto)
+    elif modo == "fondo":
+        fondo(resto[0])
+    elif modo == "preparar":
+        preparar(resto[0])
     else:
-        listar()
+        listar(resto or None)

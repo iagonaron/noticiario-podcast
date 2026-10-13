@@ -1,13 +1,20 @@
-# Prepara la sintonía de entrada y cierre a partir de una pista de biblioteca libre
-# y la deja en la carpeta privada del pódcast en Dropbox (/musica). Se lanza a mano.
-# Sin enlace: solo lista pistas disponibles.
+# Música del pódcast (biblioteca libre). Se lanza a mano. La pista elegida se guarda solo en la
+# carpeta privada del pódcast en Dropbox (/musica), nunca en este repositorio público.
+#   modo listar   → títulos y enlaces de pistas (en «enlaces», páginas de Mixkit; vacío = las de siempre)
+#   modo analizar → duración, tempo y estabilidad de las pistas de «enlaces»
+#   modo fondo    → guarda la pista de «enlaces» como cama musical (/musica/fondo.mp3)
 name: Preparar música
 
 on:
   workflow_dispatch:
     inputs:
-      url:
-        description: "Enlace .mp3 de la pista (vacío = solo listar)"
+      modo:
+        description: "listar, analizar o fondo"
+        required: false
+        default: "listar"
+        type: string
+      enlaces:
+        description: "Enlaces separados por espacios"
         required: false
         type: string
 
@@ -17,14 +24,19 @@ permissions:
 jobs:
   musica:
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 15
     env:
       DROPBOX_APP_KEY: ${{ secrets.DROPBOX_APP_KEY }}
       DROPBOX_APP_SECRET: ${{ secrets.DROPBOX_APP_SECRET }}
       DROPBOX_REFRESH_TOKEN: ${{ secrets.DROPBOX_REFRESH_TOKEN }}
-      URL_PISTA: ${{ inputs.url }}
+      MODO: ${{ inputs.modo }}
+      ENLACES: ${{ inputs.enlaces }}
     steps:
       - uses: actions/checkout@v5
-      - run: command -v ffmpeg || (sudo apt-get update -y && sudo apt-get install -y ffmpeg)
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
       - run: |
-          if [ -n "$URL_PISTA" ]; then python3 -m podcast.musica_libre preparar "$URL_PISTA"; else python3 -m podcast.musica_libre listar; fi
+          pip install numpy
+          command -v ffmpeg || (sudo apt-get update -y && sudo apt-get install -y ffmpeg)
+      - run: python -m podcast.musica_libre "${MODO:-listar}" $ENLACES
