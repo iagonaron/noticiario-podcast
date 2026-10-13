@@ -260,7 +260,8 @@ def cortes(wav_bytes, textos):
         esperado = palabras / 2.7
         if not (0.35 * esperado - 0.4 <= (b - a) <= 2.6 * esperado + 1.2):
             raise ErrorAlineado(f"un turno de {palabras} palabras quedó en {b - a:.1f}s")
-        if turnos[i] and (turnos[i]["ini"] < a - 0.15 or turnos[i]["fin"] > b + 0.15):
+        # (en los extremos de la tanda no se mira: ahí la transcripción suele dar tiempos imprecisos)
+        if turnos[i] and ((i > 0 and turnos[i]["ini"] < a - 0.15) or (i < n - 1 and turnos[i]["fin"] > b + 0.15)):
             raise ErrorAlineado(f"el turno {i + 1} tiene palabras fuera de su trozo")
     resumen = (f"{n} turnos · transcripción {'sí' if rec else 'no'} ({cobertura:.0%} de palabras) · "
                f"{sum(1 for f in fijos if f is not None)}/{n - 1} cortes fijados por la transcripción")
