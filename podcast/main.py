@@ -6,7 +6,7 @@ import tempfile
 import time
 import traceback
 
-from . import agenda, config, cumples, dropbox, festivos, guion, montaje, noticias, tiempo, util, voces
+from . import agenda, config, cumples, dropbox, festivos, guion, montaje, noticias, planes, tiempo, util, voces
 
 AQUI = os.path.dirname(os.path.abspath(__file__))
 SALIDA = os.path.join(AQUI, "..", "salida")
@@ -68,9 +68,30 @@ def lo_rapido(textos, primera_voz):
     segs, voz = [], primera_voz
     for t in textos:
         if t:
-            segs.append({"bloque": "rapido", "voz": voz, "texto": t})
+            segs.append({"bloque": "rapido", "noticia": 0, "voz": voz, "texto": t})
             voz = "B" if voz == "A" else "A"
     return segs
+
+
+def plan_del_dia(token, hoy, diag):
+    """Momento Distinto Básico: criterios e historial desde Dropbox y propuesta de Gemini."""
+    if not token:
+        return None, [], ["Distinto Básico: sin Dropbox no hay criterios"]
+    crit = dropbox.descargar(token, config.DROPBOX_PLANES_CRITERIOS)
+    if not crit:
+        return None, [], [f"Distinto Básico: no está {config.DROPBOX_PLANES_CRITERIOS} en la carpeta del pódcast"]
+    hist = dropbox.descargar(token, config.DROPBOX_PLANES_HISTORIAL)
+    historial = [l for l in (hist.decode("utf-8-sig", "replace").splitlines() if hist else []) if l.strip()]
+    plan, avisos = planes.proponer(hoy, crit.decode("utf-8-sig", "replace"), historial)
+    diag.append(f"Distinto Básico: {'propuesta de ' + plan.get('modelo', '?') if plan else 'sin propuesta'} · "
+                f"{len(historial)} propuestas anteriores")
+    return plan, historial, avisos
+
+
+def apuntar_plan(token, hoy, plan, historial):
+    lineas = historial + [planes.linea_historial(hoy, plan)]
+    texto = "\n".join(lineas[-400:]) + "\n"
+    dropbox.subir(token, config.DROPBOX_PLANES_HISTORIAL, texto.encode("utf-8-sig"))
 
 
 def main():
@@ -126,30 +147,42 @@ def main():
     except Exception as e:
         avisos.append(f"Festivos: {type(e).__name__}: {e}"[:200])
 
-    # 3) la conversación
+    # 3) el momento Distinto Básico (propuesta de plan con búsqueda en internet)
+    etapa("Distinto Básico")
+    plan, historial_planes = None, []
+    try:
+        plan, historial_planes, av = plan_del_dia(token, hoy, diag)
+        avisos += av
+    except Exception as e:
+        avisos.append(f"Distinto Básico: {type(e).__name__}: {e}"[:300])
+
+    # 4) la conversación: fecha y lo rápido (plantillas) + lo que escribe la IA + cierre (plantilla)
     etapa("guion")
-    segs_ia, info = guion.escribir(ahora, datos)
+    segs_ia, info = guion.escribir(ahora, datos, plan)
     avisos += info.get("avisos", [])
-    ap = [s for s in segs_ia if s["bloque"] == "apertura"]
-    resto = [s for s in segs_ia if s["bloque"] != "apertura"]
-    otra = "B" if ap and ap[-1]["voz"] == "A" else "A"
-    segs = ap + lo_rapido([texto_dias, texto_agenda, texto_tiempo], otra) + resto
+    if plan:
+        info["plan_fuentes"] = [u for u in ([plan.get("fuente")] + plan.get("fuentes", [])) if u]
+    inicio = guion.apertura(ahora) + lo_rapido([texto_dias, texto_agenda, texto_tiempo], "B")
+    segs = inicio + segs_ia
+    segs += guion.cierre(segs[-1]["voz"])
     info["palabras"] = sum(util.palabras(s["texto"]) for s in segs)
     util.log(f"Guion: {info.get('modelo')} · {info['palabras']} palabras · {len(segs)} turnos")
-    diag.append(f"Guion: {info.get('modelo')} · {info['palabras']} palabras · {len(segs)} turnos")
+    diag.append(f"Guion: {info.get('modelo')} · {info['palabras']} palabras · {len(segs)} turnos · {info.get('dialogo', '')}")
 
-    # 4) voces, música y montaje
+    # 5) voces, música y montaje
     with tempfile.TemporaryDirectory() as tmp:
         etapa("voces")
         try:
-            unidades, motor, av = voces.sintetizar(segs, tmp)
+            piezas, motor, av = voces.sintetizar(segs, tmp)
         finally:
             diag += ["Registro de voz:"] + [f"  {l}" for l in voces.REGISTRO]
         avisos += av
-        util.log(f"Voces: {motor} · {len(unidades)} tandas")
-        diag.append(f"Voces: {motor} · {len(unidades)} tandas")
-        diag += [f"  {u['bloque']:<9} {u['voces']:<2} {u['palabras']:>4} palabras → {u['segundos']:6.1f} s "
-                 f"({u['palabras'] / max(u['segundos'], 1) * 60:.0f} p/min)" for u in unidades]
+        util.log(f"Voces: {motor} · {len(piezas)} piezas")
+        diag.append(f"Voces: {motor} · {len(piezas)} piezas")
+        for clave in sorted({p["voz"] for p in piezas}):
+            mias = [p for p in piezas if p["voz"] == clave]
+            pal, seg = sum(p["palabras"] for p in mias), sum(p["segundos"] for p in mias)
+            diag.append(f"  voz {clave}: {len(mias)} turnos · {pal} palabras · {seg:.0f} s ({pal / max(seg, 1) * 60:.0f} p/min)")
 
         de_dropbox = {}
         if token:
@@ -164,7 +197,7 @@ def main():
         musica = montaje.cargar_musica(de_dropbox)
         diag.append(f"Música: {', '.join(sorted(musica)) or 'ninguna'}")
         wav = os.path.join(tmp, "programa.wav")
-        duracion = montaje.montar(unidades, musica, wav)
+        duracion = montaje.montar(piezas, musica, wav)
         mp3 = os.path.join(SALIDA, "Noticiario de hoy.mp3")
         titulo = f"Noticiario · {util.fecha_larga(ahora)}"
         montaje.a_mp3(wav, mp3, {"title": titulo, "artist": "Noticiario de Iago", "album": "Noticiario de Iago",
@@ -188,6 +221,11 @@ def main():
         dropbox.subir(token, config.DROPBOX_GUION, md.encode("utf-8-sig"))
         subido = True
         util.log("Subido a Dropbox")
+        if plan:
+            try:
+                apuntar_plan(token, hoy, plan, historial_planes)
+            except Exception as e:
+                avisos.append(f"Distinto Básico: no se pudo apuntar la propuesta ({type(e).__name__})")
         try:
             texto_diag = "\n".join(diag + ["", "Avisos:"] + [f"  - {a}" for a in avisos])
             dropbox.subir(token, config.DROPBOX_DIAGNOSTICO, texto_diag.encode("utf-8-sig"))

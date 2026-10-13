@@ -86,12 +86,12 @@ def tandas(segmentos, maximo=None):
     salida = []
     for s in segmentos:
         for t in _frases(util.sin_emojis(s["texto"]), maximo):
-            turno = {"voz": s["voz"], "texto": t, "bloque": s["bloque"]}
+            turno = {"voz": s["voz"], "texto": t, "bloque": s["bloque"], "noticia": s.get("noticia")}
             ultima = salida[-1] if salida else None
             if ultima and _caracteres(ultima) + len(t) <= maximo:
                 ultima["turnos"].append(turno)
             else:
-                salida.append({"bloque": s["bloque"], "turnos": [turno]})
+                salida.append({"bloque": s["bloque"], "noticia": s.get("noticia"), "turnos": [turno]})
     return salida
 
 
@@ -206,7 +206,8 @@ def _gemini_generate(modelo, tanda):
             {"speaker": _id(v), "voiceConfig": {"prebuiltVoiceConfig": {"voiceName": config.LOCUTORES[v]["gemini"]}}}
             for v in voces]}}
     else:
-        texto = f"Estilo: {config.ESTILO_VOZ}. Lee en voz alta, tal cual:\n\n" + " ".join(t["texto"] for t in tanda["turnos"])
+        texto = (f"Estilo: {config.ESTILO_VOZ}. Lee en voz alta, tal cual, haciendo una pausa entre párrafos:\n\n"
+                 + "\n\n".join(t["texto"] for t in tanda["turnos"]))
         speech = {"voiceConfig": {"prebuiltVoiceConfig": {"voiceName": config.LOCUTORES[voces[0]]["gemini"]}}}
     cuerpo = {"contents": [{"parts": [{"text": texto}]}],
               "generationConfig": {"responseModalities": ["AUDIO"], "speechConfig": speech}}
@@ -433,8 +434,8 @@ def _respaldo(pendientes, carpeta):
 
 
 # ---------------------------------------------------------------- todo junto
-def sintetizar(segmentos, carpeta):
-    """Devuelve (unidades, motor, avisos). Cada unidad: {'bloque', 'wav', 'palabras', 'segundos', 'voces'}."""
+def sintetizar_tandas(segmentos, carpeta):
+    """Método anterior (reserva): tandas con las dos voces a la vez. Devuelve (unidades, motor, avisos)."""
     lista = tandas(segmentos)
     anota(f"{len(lista)} tandas · {sum(_caracteres(t) for t in lista)} caracteres")
     avisos, pares, partes_motor = [], [], []
@@ -454,8 +455,129 @@ def sintetizar(segmentos, carpeta):
         audios, nombre = _respaldo(pendientes, carpeta)
         pares += list(zip(pendientes, audios))
         partes_motor.append(nombre)
-    unidades = [{"bloque": t["bloque"], "wav": a, "segundos": duracion_wav(a),
+    unidades = [{"bloque": t["bloque"], "noticia": t.get("noticia"), "wav": a, "segundos": duracion_wav(a),
                  "palabras": sum(util.palabras(x["texto"]) for x in t["turnos"]),
                  "voces": "".join(sorted({x["voz"] for x in t["turnos"]}))}
                 for t, a in pares]
     return unidades, " + ".join(partes_motor), avisos
+
+
+# ---------------------------------------------------------------- por voces (método principal)
+# Cada voz se genera aparte y SIEMPRE con el mismo modelo de principio a fin (así no cambia de
+# timbre ni se mezclan): primero todas las frases de Lucía, luego las de Martín, en lotes de
+# turnos enteros. Después se cortan turno a turno (alinear.py) y el montaje intercala el diálogo.
+AGOTADOS = set()
+
+
+def nombre(clave):
+    return config.LOCUTORES[clave]["nombre"]
+
+
+def _lotes_de(turnos, maximo):
+    lotes, actual, n = [], [], 0
+    for idx, t in turnos:
+        if actual and n + len(t) > maximo:
+            lotes.append(actual)
+            actual, n = [], 0
+        actual.append((idx, t))
+        n += len(t)
+    if actual:
+        lotes.append(actual)
+    return lotes
+
+
+def _voz_con_modelo(via, modelo, clave, lotes):
+    """Todas las frases de una voz con un mismo modelo. Devuelve {índice: wav}."""
+    from . import alinear
+    piezas, pendientes = {}, list(lotes)
+    presupuesto = len(lotes) * 3
+    while pendientes:
+        lote = pendientes.pop(0)
+        if presupuesto <= 0:
+            raise ModeloAgotado("demasiados reintentos para esta voz")
+        presupuesto -= 1
+        tanda = {"bloque": "voz", "turnos": [{"voz": clave, "texto": t, "bloque": "voz"} for _, t in lote]}
+        try:
+            wav = _pedir(via, modelo, tanda)
+            if len(lote) == 1:
+                piezas[lote[0][0]] = wav
+                continue
+            tramos, resumen = alinear.cortes(wav, [t for _, t in lote])
+            anota(f"    ✂ {resumen}")
+            for (idx, _), (a, b) in zip(lote, tramos):
+                piezas[idx] = alinear.recortar(wav, a, b)
+        except ModeloAgotado:
+            raise
+        except (FalloVoz, alinear.ErrorAlineado) as e:
+            if len(lote) == 1:
+                raise FalloVoz(f"un turno no sale: {str(e)[:160]}")
+            m = len(lote) // 2
+            anota(f"    → {str(e)[:120]} · parto el lote en {m}+{len(lote) - m} turnos")
+            pendientes[0:0] = [lote[:m], lote[m:]]
+    return piezas
+
+
+def _reserva_turnos(clave, turnos, carpeta):
+    """Una voz entera con Edge o, si no deja, con Piper (sin conexión), turno a turno."""
+    lista = [{"bloque": "voz", "turnos": [{"voz": clave, "texto": t, "bloque": "voz"}]} for _, t in turnos]
+    if config.MOTOR_VOZ != "piper":
+        try:
+            audios = sintetizar_edge(lista, carpeta)
+            return {idx: a for (idx, _), a in zip(turnos, audios)}, "Edge"
+        except Exception as e:
+            anota(f"Edge no disponible: {str(e)[:160]}")
+    audios = sintetizar_piper(lista)
+    return {idx: a for (idx, _), a in zip(turnos, audios)}, "Piper"
+
+
+def sintetizar_por_voces(segmentos, carpeta):
+    """Devuelve ({índice de segmento: wav}, {voz: motor}, avisos)."""
+    por_voz = {}
+    for i, s in enumerate(segmentos):
+        por_voz.setdefault(s["voz"], []).append((i, util.sin_emojis(s["texto"])))
+    wavs, motores, avisos = {}, {}, []
+    for clave in sorted(por_voz):
+        turnos = por_voz[clave]
+        lotes = _lotes_de(turnos, config.VOZ_MAX_CARACTERES)
+        hecho = False
+        if config.MOTOR_VOZ not in ("edge", "piper") and os.environ.get("GEMINI_API_KEY"):
+            for via, modelo in config.MODELOS_VOZ:
+                if modelo in AGOTADOS:
+                    continue
+                anota(f"Voz de {nombre(clave)} con {modelo} ({via}) · {len(turnos)} turnos en {len(lotes)} lotes")
+                try:
+                    wavs.update(_voz_con_modelo(via, modelo, clave, lotes))
+                    motores[clave] = modelo
+                    hecho = True
+                    break
+                except FalloVoz as e:
+                    if _es_cuota(str(e)) or "per day" in str(e).lower():
+                        AGOTADOS.add(modelo)
+                    avisos.append(f"Voz de {nombre(clave)}: {modelo} no pudo ({str(e)[:160]}); se rehace entera con otro")
+                    anota(avisos[-1])
+        if not hecho:
+            piezas, motor = _reserva_turnos(clave, turnos, carpeta)
+            wavs.update(piezas)
+            motores[clave] = motor
+            avisos.append(f"Voz de {nombre(clave)}: con voz de reserva ({motor})")
+    return wavs, motores, avisos
+
+
+def sintetizar(segmentos, carpeta):
+    """Devuelve (piezas, motor, avisos). Cada pieza: {'wav', 'bloque', 'noticia', 'voz', 'palabras', 'segundos'}."""
+    anota(f"{len(segmentos)} turnos · {sum(len(s['texto']) for s in segmentos)} caracteres")
+    try:
+        wavs, motores, avisos = sintetizar_por_voces(segmentos, carpeta)
+        piezas = []
+        for i, s in enumerate(segmentos):
+            w = wavs[i]
+            piezas.append({"wav": w, "bloque": s["bloque"], "noticia": s.get("noticia"), "voz": s["voz"],
+                           "palabras": util.palabras(s["texto"]), "segundos": duracion_wav(w)})
+        motor = " · ".join(f"{nombre(k)}: {v}" for k, v in sorted(motores.items()))
+        return piezas, motor, avisos
+    except Exception as e:
+        anota(f"El método por voces falló ({type(e).__name__}: {str(e)[:200]}); uso el de tandas conversadas")
+        unidades, motor, avisos = sintetizar_tandas(segmentos, carpeta)
+        piezas = [{"wav": u["wav"], "bloque": u["bloque"], "noticia": u.get("noticia"), "voz": u["voces"],
+                   "palabras": u["palabras"], "segundos": u["segundos"]} for u in unidades]
+        return piezas, motor + " (tandas)", avisos + [f"Voz: el método por voces falló: {str(e)[:200]}"]

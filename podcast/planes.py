@@ -1,6 +1,7 @@
 """Momento Distinto Básico: una propuesta de plan distinta cada día para Iago y Laura.
 
-Gemini busca en internet (Google Search, incluido en el plan gratuito) siguiendo los criterios
+Gemini lee las agendas de A Coruña de hoy y de los próximos días (herramienta «url_context», que
+sí entra en el plan gratuito; la búsqueda de Google no) y elige un plan siguiendo los criterios
 que Iago tiene en su Distinto Básico. Los criterios viven SOLO en su Dropbox privado
 («Distinto Básico.txt» en la carpeta del pódcast), nunca en este repositorio público, y lo ya
 propuesto se apunta en «Distinto Básico - propuestas.txt» para no repetir.
@@ -20,19 +21,41 @@ PROHIBIDO = re.compile(r"acuario|aquarium|zoo\b|zool[oó]gico|delf[ií]n|granja[
                        r"doma|rodeo|corrida|tauri", re.I)
 
 
+MESES_URL = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre",
+             "octubre", "noviembre", "diciembre"]
+
+
+def fuentes_del_dia(hoy):
+    """Agendas que se le dan a leer: la del Concello, la de Quincemil de varios días (rotando),
+    los conciertos del mes y un agregador de planes."""
+    urls = ["https://www.coruna.gal/cultura/es/agenda/proximos-eventos"]
+    desfase = hoy.toordinal() % 2          # un día pares, otro impares: más variedad
+    for d in (desfase, 2 + desfase, 4 + desfase, 6 + desfase):
+        f = hoy + dt.timedelta(days=d)
+        urls.append(f"https://www.elespanol.com/quincemil/servicios/agenda/dia/{f.day}-{f.month}-{f.year}")
+    meses = {hoy.month: hoy.year}
+    luego = hoy + dt.timedelta(days=9)
+    meses[luego.month] = luego.year
+    for mes, anio in meses.items():
+        urls.append(f"https://www.laganzua.net/conciertos/coruna/{MESES_URL[mes - 1]}-{anio}")
+    urls.append("https://planomato.com/es/a-coruna")
+    return urls
+
+
 def _texto_respuesta(j):
     partes = (((j.get("candidates") or [{}])[0].get("content") or {}).get("parts")) or []
     return "".join(p.get("text", "") for p in partes if not p.get("thought")).strip()
 
 
-def _fuentes(j):
-    meta = (j.get("candidates") or [{}])[0].get("groundingMetadata") or {}
-    urls = []
-    for c in meta.get("groundingChunks") or []:
-        w = c.get("web") or {}
-        if w.get("uri"):
-            urls.append(f"{w.get('title') or 'fuente'} · {w['uri']}")
-    return urls[:6]
+def _leidas(j):
+    """Qué páginas pudo leer de verdad (metadatos de url_context): [(url, estado)]."""
+    c = (j.get("candidates") or [{}])[0]
+    meta = c.get("urlContextMetadata") or c.get("url_context_metadata") or {}
+    salida = []
+    for u in meta.get("urlMetadata") or meta.get("url_metadata") or []:
+        salida.append((u.get("retrievedUrl") or u.get("retrieved_url") or "?",
+                       (u.get("urlRetrievalStatus") or u.get("url_retrieval_status") or "?").replace("URL_RETRIEVAL_STATUS_", "")))
+    return salida
 
 
 def _json_de(texto):
@@ -42,11 +65,15 @@ def _json_de(texto):
     return json.loads(m.group(0))
 
 
-def _pregunta(hoy, criterios, historial):
+def _pregunta(hoy, criterios, historial, urls):
     fecha = util.fecha_larga(dt.datetime.combine(hoy, dt.time(8)))
     desde, hasta = hoy + dt.timedelta(days=2), hoy + dt.timedelta(days=9)
     ya = "\n".join(f"- {l}" for l in historial[-25:]) or "- (ninguno todavía)"
-    return f"""Hoy es {fecha} de {hoy.year}. Busca en internet UNA propuesta de plan para hoy o para los próximos días en A Coruña o alrededores, siguiendo estos criterios de Iago para su «Distinto Básico» (planes en pareja con Laura):
+    agendas = "\n".join(urls)
+    return f"""Hoy es {fecha} de {hoy.year}. Lee estas agendas de A Coruña y alrededores:
+{agendas}
+
+y elige UNA propuesta de plan para hoy o para los próximos días, siguiendo estos criterios de Iago para su «Distinto Básico» (planes en pareja con Laura):
 
 {criterios}
 
@@ -55,8 +82,8 @@ YA PROPUESTOS (no repitas ninguno; si puedes, tampoco el mismo sitio de comida):
 
 CÓMO ELEGIR
 - Varía de un día para otro: unos días algo con fecha entre el {util.fecha_larga(dt.datetime.combine(desde, dt.time(8)))} y el {util.fecha_larga(dt.datetime.combine(hasta, dt.time(8)))} para lo que convenga sacar entradas o reservar con unos días de antelación; otros, algo de esta misma semana o de hoy que se pueda hacer sin organizar casi nada.
-- Comprueba en fuentes de internet la fecha, la hora, el lugar, el precio y si hay que reservar. Si no lo puedes confirmar, elige otro plan: antes algo sencillo y seguro que algo dudoso.
-- Para comer: un sitio vegano o con opción vegana marcada como tal, cerca de la actividad y abierto a esa hora.
+- Usa SOLO lo que digan esas páginas para la fecha, la hora, el lugar, el precio y si hay que reservar. Si un dato no viene, pon null: no lo inventes. Antes algo sencillo y seguro que algo dudoso.
+- Para comer: de la lista de sitios de los criterios, el que esté más cerca del lugar de la actividad (si no sabes cuál, uno céntrico); di qué tiene vegano según la lista.
 
 Responde SOLO con un objeto JSON, sin texto antes ni después, con estas claves:
 {{"titulo": "nombre del plan",
@@ -98,7 +125,8 @@ def proponer(hoy, criterios, historial):
     avisos = []
     if not criterios or not os.environ.get("GEMINI_API_KEY"):
         return None, ["Distinto Básico: faltan los criterios o la clave de Gemini"]
-    pregunta = _pregunta(hoy, criterios, historial)
+    urls = fuentes_del_dia(hoy)
+    pregunta = _pregunta(hoy, criterios, historial, urls)
     for modelo in config.MODELOS_PLANES:
         for intento in range(2):
             t0 = time.time()
@@ -106,8 +134,8 @@ def proponer(hoy, criterios, historial):
                 r = requests.post(URL.format(modelo=modelo), timeout=180,
                                   headers={"x-goog-api-key": os.environ["GEMINI_API_KEY"], "Content-Type": "application/json"},
                                   json={"contents": [{"role": "user", "parts": [{"text": pregunta}]}],
-                                        "tools": [{"google_search": {}}],
-                                        "generationConfig": {"temperature": 0.9}})
+                                        "tools": [{"url_context": {}}],
+                                        "generationConfig": {"temperature": 0.8}})
                 if r.status_code != 200:
                     m = re.search(r'"message"\s*:\s*"([^"]{0,160})', r.text)
                     raise RuntimeError(f"HTTP {r.status_code}: {m.group(1) if m else r.text[:160]}")
@@ -116,9 +144,11 @@ def proponer(hoy, criterios, historial):
                 motivo = _valido(plan, hoy, historial)
                 if motivo:
                     raise RuntimeError(f"propuesta descartada ({motivo})")
-                plan["fuentes"] = _fuentes(j)
+                leidas = _leidas(j)
+                plan["fuentes"] = [u for u, est in leidas if "SUCCESS" in est.upper()]
                 plan["modelo"] = modelo
-                util.log(f"Distinto Básico: {modelo} en {time.time() - t0:.0f}s · {len(plan['fuentes'])} fuentes")
+                plan["lectura"] = ", ".join(f"{u.split('/')[2] if '//' in u else u}: {est.lower()}" for u, est in leidas)
+                util.log(f"Distinto Básico: {modelo} en {time.time() - t0:.0f}s · páginas: {plan['lectura']}")
                 return plan, avisos
             except Exception as e:
                 avisos.append(f"Distinto Básico · {modelo}: {str(e)[:200]}")
