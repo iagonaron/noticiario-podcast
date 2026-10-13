@@ -32,7 +32,8 @@ UV_PROTECCION = 3           # índice UV a partir del cual se recomienda protecc
 REPARTO = {"distinto": 170}   # palabras del momento Distinto Básico (va aparte, después de las noticias)
 # palabras por noticia de cada bloque: con 7 titulares, 3 locales y 3 de interés salen unos 12 minutos
 PALABRAS_POR_NOTICIA = {"titulares": 155, "local": 120, "interes": 170}
-GUION_PENSAR = os.environ.get("GUION_PENSAR") or "low"   # «low» = el guionista piensa menos y tarda bastante menos
+# «low» = el guionista piensa menos y tarda la mitad, pero se queda corto de longitud; vacío = lo normal
+GUION_PENSAR = os.environ.get("GUION_PENSAR") or ""
 PLAN_ESPERA_MAX = 420        # segundos desde el inicio que se espera como mucho la propuesta del Distinto Básico
 LOCAL_MAX = 3                # noticias de Coruña y Galicia que entran
 # Momento Distinto Básico: modelos con búsqueda de Google (incluida en el plan gratuito)

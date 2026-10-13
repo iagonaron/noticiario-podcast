@@ -87,7 +87,7 @@ FORMATO: DIÁLOGO CONSTANTE ENTRE DOS VOCES
 - Dos presentadores, voz A y voz B, que se reparten cada noticia en diálogo, al estilo de los pódcast de NotebookLM. Le hablan a Iago de tú.
 - NO se presentan, NO se saludan, NO dicen sus nombres ni el de Iago y NO se despiden: el programa ya tiene su entrada y su salida. Empezad directamente con la primera noticia.
 - Diálogo SIEMPRE: cada noticia la cuentan entre los dos, alternando la voz en cada turno (A, B, A, B…). Nunca dos turnos seguidos de la misma voz y ninguna noticia contada por una voz sola.
-- BREVE: cada noticia en 2 a 4 turnos (solo las dos más importantes del día pueden llegar a 5). Turnos de una o dos frases, nunca más de 35 palabras. Al grano: lo esencial, sin rodeos ni repeticiones.
+- Ágil y al grano: cada noticia en 4 o 5 turnos (las dos más importantes del día, hasta 6), de 20 a 40 palabras cada uno. Lo esencial, sin rodeos ni repeticiones.
 - Uno cuenta y el otro pregunta lo que se preguntaría cualquiera («¿y eso en qué me afecta?», «a ver, explícame eso»), reacciona («¡no me digas!», «ojo con esto»), resume o pone un ejemplo. Se van turnando ese papel.
 - Español de España, coloquial y natural. Desenfadado, con humor ligero cuando cuadre, sin pasarse: nada de chistes malos, risas escritas, gritos ni exageraciones.
 - Que se entienda TODO a la primera: palabras sencillas, comparaciones con la vida diaria, cifras redondeadas («casi el doble», «unos ciento sesenta mil»), siglas explicadas, nada de jerga.
@@ -104,7 +104,7 @@ Entre una noticia y la siguiente sonará una ráfaga de música, así que no hac
 QUÉ CONTAR
 - Cuenta TODAS las noticias que te paso ({n_noticias} en total), salvo las repetidas y las que sean solo del tiempo.
 - Para cada noticia: qué ha pasado, explicado fácil; por qué importa o en qué le afecta a una persona normal; y, si lo hay, un detalle curioso o qué va a pasar ahora.
-- Las dos más importantes del día, con algo más de calma; el resto, resumidas en dos o tres turnos.
+- Las dos más importantes del día, con algo más de calma; el resto, en cuatro turnos.
 - Usa SOLO la información que te paso. No inventes datos, nombres, cifras, fechas ni declaraciones.
 - Las noticias en gallego, cuéntalas en castellano.
 - Deportes: NUNCA digas resultados, marcadores, goles ni quién ganó.
@@ -113,7 +113,7 @@ NUMERACIÓN
 - Cada turno lleva «noticia»: el número de la noticia que se está contando, empezando por 1 y siguiendo en orden por todo el programa (los titulares 1, 2, 3…, y local e interes siguen la cuenta). Todos los turnos de una misma noticia llevan el mismo número.{" El momento Distinto Básico es la última." if con_plan else ""}
 
 LONGITUD
-- Entre {minimo} y {maximo} palabras en total: las noticias tienen que caber en unos 12 minutos. Reparto: {reparto}. NO te pases: mejor quedarse algo corto que largo.
+- Entre {minimo} y {maximo} palabras en total: las noticias tienen que caber en unos 12 minutos. Reparto: {reparto}. Ajústate a esa longitud: ni mucho más corto ni más largo.
 
 SALIDA
 - Solo el JSON con «segmentos»: cada turno con «bloque», «noticia», «voz» (A o B) y «texto» (exactamente lo que se dice)."""
