@@ -28,11 +28,8 @@ MESES_URL = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "ag
 def fuentes_del_dia(hoy):
     """Agendas que se le dan a leer: la del Concello, la de Quincemil de varios días (rotando),
     los conciertos del mes y un agregador de planes."""
-    urls = ["https://www.coruna.gal/cultura/es/agenda/proximos-eventos"]
-    desfase = hoy.toordinal() % 2          # un día pares, otro impares: más variedad
-    for d in (desfase, 2 + desfase, 4 + desfase, 6 + desfase):
-        f = hoy + dt.timedelta(days=d)
-        urls.append(f"https://www.elespanol.com/quincemil/servicios/agenda/dia/{f.day}-{f.month}-{f.year}")
+    urls = ["https://www.coruna.gal/cultura/es/agenda/proximos-eventos",
+            f"https://www.elespanol.com/quincemil/servicios/agenda/dia/{hoy.day}-{hoy.month}-{hoy.year}"]
     meses = {hoy.month: hoy.year}
     luego = hoy + dt.timedelta(days=9)
     meses[luego.month] = luego.year
@@ -83,7 +80,7 @@ YA PROPUESTOS (no repitas ninguno; si puedes, tampoco el mismo sitio de comida):
 CÓMO ELEGIR
 - Varía de un día para otro: unos días algo con fecha entre el {util.fecha_larga(dt.datetime.combine(desde, dt.time(8)))} y el {util.fecha_larga(dt.datetime.combine(hasta, dt.time(8)))} para lo que convenga sacar entradas o reservar con unos días de antelación; otros, algo de esta misma semana o de hoy que se pueda hacer sin organizar casi nada.
 - Usa SOLO lo que digan esas páginas para la fecha, la hora, el lugar, el precio y si hay que reservar. Si un dato no viene, pon null: no lo inventes. Antes algo sencillo y seguro que algo dudoso.
-- Para comer: de la lista de sitios de los criterios, el que esté más cerca del lugar de la actividad (si no sabes cuál, uno céntrico); di qué tiene vegano según la lista.
+- Para comer: SOLO uno de la lista de sitios que viene en los criterios (copia su nombre tal cual), el que esté más cerca del lugar de la actividad; di qué tiene vegano según la lista. Nunca te inventes un sitio: si no hay lista, pon "comer": null.
 
 Responde SOLO con un objeto JSON, sin texto antes ni después, con estas claves:
 {{"titulo": "nombre del plan",
@@ -114,10 +111,19 @@ def _valido(p, hoy, historial):
         if not hoy <= d <= hoy + dt.timedelta(days=14):
             return f"fecha fuera de plazo: {d}"
     titulo = util.sin_tildes(str(p["titulo"]).lower())
+    if p.get("hora") and not re.match(r"^\d{1,2}:\d{2}$", str(p["hora"])):
+        p["hora"] = None
     for linea in historial[-40:]:
         if titulo[:40] and titulo[:40] in util.sin_tildes(linea.lower()):
             return "repetido"
     return None
+
+
+def _en_lista(nombre, criterios):
+    """¿Aparece ese sitio en la lista de los criterios? (sin tildes ni mayúsculas)"""
+    n = util.sin_tildes(nombre or "").lower().strip()
+    n = re.sub(r"^(restaurante|bar|cafeteria|taberna)\s+", "", n)
+    return len(n) >= 4 and n[:20] in util.sin_tildes(criterios or "").lower()
 
 
 def proponer(hoy, criterios, historial):
@@ -131,7 +137,7 @@ def proponer(hoy, criterios, historial):
         for intento in range(2):
             t0 = time.time()
             try:
-                r = requests.post(URL.format(modelo=modelo), timeout=180,
+                r = requests.post(URL.format(modelo=modelo), timeout=240,
                                   headers={"x-goog-api-key": os.environ["GEMINI_API_KEY"], "Content-Type": "application/json"},
                                   json={"contents": [{"role": "user", "parts": [{"text": pregunta}]}],
                                         "tools": [{"url_context": {}}],
@@ -144,6 +150,10 @@ def proponer(hoy, criterios, historial):
                 motivo = _valido(plan, hoy, historial)
                 if motivo:
                     raise RuntimeError(f"propuesta descartada ({motivo})")
+                comer = plan.get("comer") if isinstance(plan.get("comer"), dict) else None
+                if comer and not _en_lista(comer.get("nombre", ""), criterios):
+                    avisos.append(f"Distinto Básico: el sitio de comer propuesto no estaba en la lista; se omite")
+                    plan["comer"] = None
                 leidas = _leidas(j)
                 plan["fuentes"] = [u for u, est in leidas if "SUCCESS" in est.upper()]
                 plan["modelo"] = modelo

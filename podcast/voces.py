@@ -215,7 +215,28 @@ def _gemini_generate(modelo, tanda):
 
 
 def _llamada(via, modelo, tanda):
+    if via == "piper":                       # solo para pruebas sin gastar cupo («piper:local»)
+        return _piper_tanda(tanda)
     return (_gemini_interactions if via == "interactions" else _gemini_generate)(modelo, tanda)
+
+
+def _piper_tanda(tanda):
+    """Una tanda de una sola voz con Piper, con pausas entre turnos como las de una lectura seguida."""
+    import random
+    from pydub import AudioSegment
+    from piper import SynthesisConfig
+    voces = _piper_cargar()
+    voz, sid = voces[tanda["turnos"][0]["voz"]]
+    total = AudioSegment.silent(duration=300, frame_rate=24000)
+    for t in tanda["turnos"]:
+        b = io.BytesIO()
+        with wave.open(b, "wb") as w:
+            voz.synthesize_wav(t["texto"], w, syn_config=SynthesisConfig(speaker_id=sid, length_scale=config.PIPER_LENTITUD))
+        seg = AudioSegment.from_wav(io.BytesIO(b.getvalue())).set_channels(1).set_frame_rate(24000).set_sample_width(2)
+        total += seg + AudioSegment.silent(duration=random.randint(300, 750), frame_rate=24000)
+    out = io.BytesIO()
+    total.export(out, format="wav")
+    return out.getvalue()
 
 
 def _razonable(wav, tanda):
