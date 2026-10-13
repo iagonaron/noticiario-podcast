@@ -171,12 +171,14 @@ def cortes():
     for i, texto in lote:
         x = alinear.a_mono16k(piezas[i])
         segs, _ = m.transcribe(x, language="es", beam_size=1, vad_filter=False) if m else ([], None)
-        oido = alinear.norma(" ".join(sg.text for sg in segs))
-        esperado = alinear.norma(texto)
-        ok_ini = bool(oido) and oido[0][:4] == esperado[0][:4]
-        ok_fin = bool(oido) and oido[-1][:4] == esperado[-1][:4]
+        oido = "".join(alinear.norma(" ".join(sg.text for sg in segs)))
+        esperado = "".join(alinear.norma(texto))
+        import difflib
+        # sin espacios ni signos: el principio y el final de lo oído tienen que parecerse a los del turno
+        ok_ini = difflib.SequenceMatcher(None, oido[:8], esperado[:8]).ratio() >= 0.6
+        ok_fin = difflib.SequenceMatcher(None, oido[-8:], esperado[-8:]).ratio() >= 0.6
         if not (ok_ini and ok_fin):
-            malos.append(f"turno {i + 1}: oído «{' '.join(oido[:3])} … {' '.join(oido[-3:])}»")
+            malos.append(f"turno {i + 1}: oído «{oido[:12]} … {oido[-12:]}» (esperado «{esperado[:12]} … {esperado[-12:]}»)")
     nota("Cortes", f"{modelo} ({via}) · {len(lote)} turnos en {time.time() - t0:.0f}s · trozos mal cortados: {len(malos)} · "
                    f"{' | '.join(malos)} · registro: " + " | ".join(voces.REGISTRO[-4:]))
 
