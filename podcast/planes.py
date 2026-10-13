@@ -74,7 +74,7 @@ y elige UNA propuesta de plan para hoy o para los próximos días, siguiendo est
 
 {criterios}
 
-YA PROPUESTOS (no repitas ninguno; si puedes, tampoco el mismo sitio de comida):
+YA PROPUESTOS (no repitas ninguno: ni el mismo evento ni el mismo lugar de actividad en al menos una semana; si puedes, tampoco el mismo sitio de comida):
 {ya}
 
 CÓMO ELEGIR
@@ -110,13 +110,42 @@ def _valido(p, hoy, historial):
             return f"fecha rara: {p['dia']}"
         if not hoy <= d <= hoy + dt.timedelta(days=14):
             return f"fecha fuera de plazo: {d}"
-    titulo = util.sin_tildes(str(p["titulo"]).lower())
     if p.get("hora") and not re.match(r"^\d{1,2}:\d{2}$", str(p["hora"])):
         p["hora"] = None
-    for linea in historial[-40:]:
-        if titulo[:40] and titulo[:40] in util.sin_tildes(linea.lower()):
-            return "repetido"
+    if _repetido(p, historial):
+        return "repetido"
     return None
+
+
+def _claves(texto):
+    """Palabras con contenido de un texto (sin tildes ni palabras vacías)."""
+    vacias = {"de", "del", "la", "el", "los", "las", "en", "y", "a", "con", "por", "para", "un", "una", "al",
+              "coruna", "concierto", "festival", "sesion", "proyeccion", "edicion", "2026", "2027",
+              "internacional", "internacionales", "exposicion", "teatro", "musica", "museo", "taller", "charla",
+              "noche", "visita", "ruta", "mercado", "feria", "fiesta", "jornada", "jornadas", "ciclo", "cine",
+              "presentacion", "espectaculo", "danza", "obra", "directo", "vivo", "gratis", "gratuita", "gratuito",
+              "programa", "galicia", "gallego", "gallega", "cortos", "cortometrajes", "peliculas", "pelicula"}
+    return {w for w in re.findall(r"[a-z0-9ñ]{3,}", util.sin_tildes(texto or "").lower()) if w not in vacias}
+
+
+def _repetido(p, historial):
+    """¿Es el mismo plan (o el mismo sitio de actividad) que alguno de los últimos días?"""
+    import difflib
+    titulo = util.sin_tildes(str(p.get("titulo") or "")).lower()
+    lugar = _claves(p.get("lugar"))
+    for k, linea in enumerate(reversed(historial[-21:])):
+        partes = [x.strip() for x in linea.split(" · ")]
+        if len(partes) < 2:
+            continue
+        viejo = util.sin_tildes(partes[1]).lower()
+        if difflib.SequenceMatcher(None, titulo, viejo).ratio() >= 0.6:
+            return True
+        comunes = _claves(partes[1]) & _claves(titulo)
+        if len(comunes) >= 2 or any(len(w) >= 8 for w in comunes):
+            return True          # mismo evento con otro título (p. ej. el mismo festival)
+        if k < 7 and len(partes) >= 4 and lugar and len(lugar & _claves(partes[3])) >= max(1, min(2, len(lugar))):
+            return True          # mismo sitio de actividad en la última semana
+    return False
 
 
 def _en_lista(nombre, criterios):
