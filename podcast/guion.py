@@ -89,6 +89,7 @@ FORMATO: DIÁLOGO CONSTANTE ENTRE DOS VOCES
 - Diálogo SIEMPRE: cada noticia la cuentan entre los dos, alternando la voz en cada turno (A, B, A, B…). Nunca dos turnos seguidos de la misma voz y ninguna noticia contada por una voz sola.
 - Ágil y al grano: cada noticia en 4 o 5 turnos (las dos más importantes del día, hasta 6), de 20 a 40 palabras cada uno. Lo esencial, sin rodeos ni repeticiones.
 - Uno cuenta y el otro pregunta lo que se preguntaría cualquiera («¿y eso en qué me afecta?», «a ver, explícame eso»), reacciona («¡no me digas!», «ojo con esto»), resume o pone un ejemplo. Se van turnando ese papel.
+- Una pregunta la responde SIEMPRE la otra voz, en el turno siguiente: nunca preguntes y te respondas en el mismo turno.
 - Español de España, coloquial y natural. Desenfadado, con humor ligero cuando cuadre, sin pasarse: nada de chistes malos, risas escritas, gritos ni exageraciones.
 - Que se entienda TODO a la primera: palabras sencillas, comparaciones con la vida diaria, cifras redondeadas («casi el doble», «unos ciento sesenta mil»), siglas explicadas, nada de jerga.
 - Escribe las cifras con letras, tal como se dicen («dos mil veintiséis», «el veinticinco por ciento»).
@@ -106,6 +107,7 @@ QUÉ CONTAR
 - Para cada noticia: qué ha pasado, explicado fácil; por qué importa o en qué le afecta a una persona normal; y, si lo hay, un detalle curioso o qué va a pasar ahora.
 - Las dos más importantes del día, con algo más de calma; el resto, en cuatro turnos.
 - Usa SOLO la información que te paso. No inventes datos, nombres, cifras, fechas ni declaraciones.
+- Si de una noticia hay poca información, cuéntala en menos turnos: nunca rellenes con opiniones, moralejas ni frases genéricas («habrá que seguirlo de cerca», «da que pensar»).
 - Las noticias en gallego, cuéntalas en castellano.
 - Deportes: NUNCA digas resultados, marcadores, goles ni quién ganó.
 {plan}
@@ -264,6 +266,10 @@ def _ordenar_y_numerar(segs):
     return segs
 
 
+RE_RESPUESTA = re.compile(r"(?<=\?)\s+(?=(?:Pues|Sí|Si,|No,|Claro|Exacto|Muchísimo|Totalmente|Eso es|Así es|"
+                          r"Efectivamente|Tal cual|Desde luego|Para nada|Qué va|Justo)\b)")
+
+
 def _unir_seguidos(segs):
     """Si el guionista pone dos turnos seguidos de la misma voz en la misma noticia, se unen
     (y el aviso queda en el diagnóstico)."""
@@ -341,7 +347,9 @@ def escribir(hoy_dt, noticias, plan=None):
     segs = _ordenar_y_numerar(segs)
     segs, unidos = _unir_seguidos(segs)
     largos = sum(1 for s in segs if util.palabras(s["texto"]) > 60)
-    info["dialogo"] = f"{len(segs)} turnos · {unidos} turnos seguidos de la misma voz unidos · {largos} turnos de más de 60 palabras"
+    autorespuestas = sum(1 for s in segs if len(RE_RESPUESTA.split(s["texto"], maxsplit=1)) == 2)
+    info["dialogo"] = (f"{len(segs)} turnos · {unidos} turnos seguidos de la misma voz unidos · "
+                       f"{largos} turnos de más de 60 palabras · {autorespuestas} turnos que preguntan y se responden")
     info["palabras"] = sum(util.palabras(s["texto"]) for s in segs)
     return segs, info
 
@@ -368,7 +376,8 @@ def escribir_distinto(plan, primera, numero):
 - El primer turno empieza exactamente con: «Y para terminar, el momento Distinto Básico.»
 - Cuenta: qué es (explicado a quien no lo conoce), cuándo y dónde, cuánto cuesta, si hay que reservar y con cuánta antelación, y dónde comer vegano cerca. Di por qué les puede gustar. Si en «visma» pone true, se puede decir que Visma, su perra, también puede ir.
 - Usa SOLO los datos que te paso: ni fechas, ni horas, ni precios, ni sitios inventados. Si un dato no viene, no lo digas. Las direcciones web no se leen.
-- Español de España, coloquial y natural, de tú; sin saludos, sin nombres de los presentadores, sin despedida. Cifras con letras.
+- Español de España, coloquial y natural, hablándole a Iago de tú (nunca «a Iago le…» en tercera persona); sin saludos, sin nombres de los presentadores, sin despedida. Cifras con letras.
+- Una pregunta la responde siempre la otra voz; nada de rellenos.
 - Salida: solo el JSON con «segmentos» (bloque «distinto», noticia {numero}, voz A o B, texto)."""
     datos = {k: v for k, v in plan.items() if k not in ("fuentes", "fuente", "modelo", "lectura")}
     usuario = "PROPUESTA (JSON):\n" + json.dumps(datos, ensure_ascii=False)
