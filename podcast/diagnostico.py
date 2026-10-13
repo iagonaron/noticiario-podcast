@@ -134,6 +134,53 @@ def planes():
                             f"fecha propuesta {plan.get('dia') if plan else '-'} · avisos: {avisos}"[:3000])
 
 
+TURNOS_PRUEBA = [
+    "El Tribunal Supremo ha dejado sin voto a más de ciento sesenta mil personas que se nacionalizaron con la ley de nietos.",
+    "¿Y eso por qué?",
+    "Porque considera que la instrucción de Justicia no se ajusta a la ley. Y ojo, que la decisión no fue unánime.",
+    "Una magistrada firmó un voto discrepante muy duro, diciendo que el daño es irreparable.",
+    "¡No me digas!",
+    "Los Reyes visitan hoy Ceuta, dos meses después de la entrada de unas ochenta mil personas.",
+    "La normalidad todavía queda lejos, dicen los vecinos, aunque las playas ya están despejadas.",
+    "El Fondo Monetario Internacional sube la previsión de crecimiento de España hasta el dos coma cinco por ciento.",
+    "Eso es una buena noticia, ¿no?",
+    "Sí, aunque la deuda pública sigue siendo nuestro talón de Aquiles si los tipos no bajan.",
+    "Un vecino de A Coruña tendrá que repartir un premio de lotería con su exmujer.",
+    "Vaya puntería.",
+    "La Audiencia Provincial dice que, como no estaban divorciados, el premio va a medias.",
+    "Y en ciencia, unos microrobots que se recargan simplemente caminando sobre el suelo.",
+    "Mide apenas un milímetro cuadrado y tiene un grosor de ciento treinta y cinco micrómetros.",
+    "Tal cual.",
+]
+
+
+def cortes():
+    """Una tanda de una voz como las del episodio: se corta en turnos y luego cada trozo se transcribe
+    por separado para ver si empieza y acaba donde debe (solo cifras)."""
+    from . import voces, alinear, config
+    via, modelo = config.MODELOS_VOZ[0]
+    lote = list(enumerate(TURNOS_PRUEBA))
+    t0 = time.time()
+    try:
+        piezas = voces._voz_con_modelo(via, modelo, "A", [lote])
+    except Exception as e:
+        nota("Cortes", f"FALLO {modelo}: {str(e)[:600]} · registro: " + " | ".join(voces.REGISTRO[-6:]), "warning")
+        return
+    malos = []
+    m = alinear._modelo()
+    for i, texto in lote:
+        x = alinear.a_mono16k(piezas[i])
+        segs, _ = m.transcribe(x, language="es", beam_size=1, vad_filter=False) if m else ([], None)
+        oido = alinear.norma(" ".join(sg.text for sg in segs))
+        esperado = alinear.norma(texto)
+        ok_ini = bool(oido) and oido[0][:4] == esperado[0][:4]
+        ok_fin = bool(oido) and oido[-1][:4] == esperado[-1][:4]
+        if not (ok_ini and ok_fin):
+            malos.append(f"turno {i + 1}: oído «{' '.join(oido[:3])} … {' '.join(oido[-3:])}»")
+    nota("Cortes", f"{modelo} ({via}) · {len(lote)} turnos en {time.time() - t0:.0f}s · trozos mal cortados: {len(malos)} · "
+                   f"{' | '.join(malos)} · registro: " + " | ".join(voces.REGISTRO[-4:]))
+
+
 def busqueda():
     """¿Qué herramientas de búsqueda deja usar el plan gratuito? (solo datos técnicos)"""
     import os
@@ -183,6 +230,6 @@ if __name__ == "__main__":
     for prueba in (sys.argv[1:] or ["elpais"]):
         try:
             {"elpais": elpais, "noticias": noticias, "voz": voz, "guion": guion, "edge": edge,
-             "piper": piper, "vozlarga": vozlarga, "planes": planes, "busqueda": busqueda}[prueba]()
+             "piper": piper, "vozlarga": vozlarga, "planes": planes, "busqueda": busqueda, "cortes": cortes}[prueba]()
         except Exception as e:
             nota(f"Diagnóstico {prueba}", traceback.format_exc()[-1500:], "warning")

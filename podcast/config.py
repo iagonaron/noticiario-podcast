@@ -77,6 +77,7 @@ MODELOS_VOZ = [tuple(x.strip().split(":", 1)) for x in
                (os.environ.get("MODELOS_VOZ") or _MODELOS_VOZ_DEFECTO).split(",") if ":" in x]
 VOZ_MAX_CARACTERES = int(os.environ.get("VOZ_MAX_CARACTERES") or 3800)   # unas 4 tandas por episodio
 WHISPER_MODELO = os.environ.get("WHISPER_MODELO") or "base"   # transcripción para cortar los turnos
+VOZ_PAUSA_ENTRE_TURNOS = True   # etiqueta <long pause> de Gemini 3.8 entre turnos de una misma voz
 VOZ_TIMEOUT = 180            # segundos de espera máxima por petición de voz (si no, otro modelo)
 EDGE_VELOCIDAD = "+4%"
 PIPER_LENTITUD = 0.95        # <1 = algo más rápido

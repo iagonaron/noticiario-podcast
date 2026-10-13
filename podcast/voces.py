@@ -182,11 +182,14 @@ def _post(url, cuerpo, etiqueta):
 def _gemini_interactions(modelo, tanda):
     voces = sorted({t["voz"] for t in tanda["turnos"]})
     contenido = []
-    for t in tanda["turnos"]:
+    for k, t in enumerate(tanda["turnos"]):
         meta = {"type": "speech_metadata", "style": config.ESTILO_VOZ}
         if len(voces) > 1:
             meta["speaker"] = _id(t["voz"])
-        contenido.append({"type": "text", "text": t["texto"], "annotations": [meta]})
+        texto = t["texto"]
+        if tanda.get("pausas") and k < len(tanda["turnos"]) - 1:
+            texto += " <long pause>"          # pausa clara entre turnos: así el corte no falla
+        contenido.append({"type": "text", "text": texto, "annotations": [meta]})
     if len(voces) > 1:
         speech = {"mode": "conversational",
                   "speakers": [{"speaker": _id(v), "voice": config.LOCUTORES[v]["gemini"]} for v in voces]}
@@ -488,6 +491,7 @@ def sintetizar_tandas(segmentos, carpeta):
 # timbre ni se mezclan): primero todas las frases de Lucía, luego las de Martín, en lotes de
 # turnos enteros. Después se cortan turno a turno (alinear.py) y el montaje intercala el diálogo.
 AGOTADOS = set()
+SIN_PAUSAS = set()          # modelos que leen en voz alta la etiqueta <long pause>
 
 
 def nombre(clave):
@@ -517,13 +521,20 @@ def _voz_con_modelo(via, modelo, clave, lotes):
         if presupuesto <= 0:
             raise ModeloAgotado("demasiados reintentos para esta voz")
         presupuesto -= 1
-        tanda = {"bloque": "voz", "turnos": [{"voz": clave, "texto": t, "bloque": "voz"} for _, t in lote]}
+        tanda = {"bloque": "voz", "turnos": [{"voz": clave, "texto": t, "bloque": "voz"} for _, t in lote],
+                 "pausas": via == "interactions" and config.VOZ_PAUSA_ENTRE_TURNOS and modelo not in SIN_PAUSAS}
         try:
             wav = _pedir(via, modelo, tanda)
             if len(lote) == 1:
                 piezas[lote[0][0]] = wav
                 continue
             tramos, resumen = alinear.cortes(wav, [t for _, t in lote])
+            if tanda["pausas"] and alinear.se_oye("long pause"):
+                # si la etiqueta se llega a leer en voz alta, se repite este lote sin ella
+                SIN_PAUSAS.add(modelo)
+                anota(f"    ⚠ {modelo} leyó la etiqueta de pausa: repito el lote sin ella")
+                pendientes.insert(0, lote)
+                continue
             anota(f"    ✂ {resumen}")
             for (idx, _), (a, b) in zip(lote, tramos):
                 piezas[idx] = alinear.recortar(wav, a, b)

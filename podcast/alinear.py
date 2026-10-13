@@ -91,9 +91,20 @@ def _modelo():
     return _MODELO["m"]
 
 
+_ULTIMAS = {"palabras": []}
+
+
+def se_oye(frase):
+    """¿Aparece esa frase (p. ej. «long pause») en lo último que se transcribió?"""
+    toks = norma(frase)
+    oidas = [w for w, _, _ in _ULTIMAS["palabras"]]
+    return any(oidas[i:i + len(toks)] == toks for i in range(len(oidas) - len(toks) + 1)) if toks else False
+
+
 def _palabras(x):
     m = _modelo()
     if m is None:
+        _ULTIMAS["palabras"] = []
         return []
     segs, _ = m.transcribe(x, language="es", word_timestamps=True, beam_size=1, vad_filter=False,
                            condition_on_previous_text=False)
@@ -102,6 +113,7 @@ def _palabras(x):
         for w in (s.words or []):
             for tok in norma(w.word):
                 out.append((tok, float(w.start), float(w.end)))
+    _ULTIMAS["palabras"] = out
     return out
 
 
