@@ -244,7 +244,7 @@ def main():
         dropbox.subir(token, config.DROPBOX_GUION, md.encode("utf-8-sig"))
         subido = True
         util.log("Subido a Dropbox")
-        if plan:
+        if plan and not config.PRUEBA:
             try:
                 apuntar_plan(token, hoy, plan, historial_planes)
             except Exception as e:

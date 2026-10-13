@@ -82,13 +82,16 @@ PIPER_LENTITUD = 0.95        # <1 = algo más rápido
 MOTOR_VOZ = (os.environ.get("MOTOR_VOZ") or "gemini").strip().lower()
 
 # ---------------------------------------------------------------- Dropbox (carpeta de la app)
-DROPBOX_MP3 = "/Noticiario de hoy.mp3"
-DROPBOX_GUION = "/Guion de hoy.md"
+# En las pruebas (PRUEBA=si) todo va a la subcarpeta «Pruebas», para no pisar el episodio del día
+_PREFIJO = "/Pruebas" if (os.environ.get("PRUEBA") or "").lower() in ("si", "sí", "true", "1") else ""
+PRUEBA = bool(_PREFIJO)
+DROPBOX_MP3 = _PREFIJO + "/Noticiario de hoy.mp3"
+DROPBOX_GUION = _PREFIJO + "/Guion de hoy.md"
 DROPBOX_PLANES_CRITERIOS = "/Distinto Básico.txt"              # criterios de Iago (solo en Dropbox)
 DROPBOX_PLANES_HISTORIAL = "/Distinto Básico - propuestas.txt"  # lo ya propuesto, para no repetir
 DROPBOX_CUMPLES = "/Cumpleaños.txt"   # la lista de cumpleaños vive SOLO aquí (el repositorio es público)
 DROPBOX_MUSICA = "/musica"   # intro / transicion / cierre (.mp3 o .wav); si no hay, va sin música
-DROPBOX_DIAGNOSTICO = "/Diagnóstico.txt"   # datos técnicos de la última ejecución
+DROPBOX_DIAGNOSTICO = _PREFIJO + "/Diagnóstico.txt"   # datos técnicos de la última ejecución
 
 # ---------------------------------------------------------------- montaje
 MP3_KBPS = "96k"

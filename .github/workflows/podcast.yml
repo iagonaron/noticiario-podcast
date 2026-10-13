@@ -23,6 +23,11 @@ on:
         description: "Solo para pruebas: gemini, edge o piper (vacío = el de siempre)"
         required: false
         type: string
+      prueba:
+        description: "Prueba: deja el resultado en Dropbox/…/Pruebas sin pisar el episodio del día (si/no)"
+        required: false
+        default: "no"
+        type: string
 
 permissions:
   contents: write          # solo para el «latido» mensual que mantiene viva la programación
@@ -47,6 +52,7 @@ jobs:
       VOZ_A: ${{ vars.VOZ_A }}
       VOZ_B: ${{ vars.VOZ_B }}
       MOTOR_VOZ: ${{ inputs.motor_voz || vars.MOTOR_VOZ }}
+      PRUEBA: ${{ inputs.prueba || 'no' }}
       MODELOS_VOZ: ${{ inputs.modelos_voz || vars.MODELOS_VOZ }}
     steps:
       - uses: actions/checkout@v5
