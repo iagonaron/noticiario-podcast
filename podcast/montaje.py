@@ -44,9 +44,9 @@ def cargar_musica(desde_dropbox=None):
 
 def _recortar(seg):
     """Quita el silencio de los extremos (dejando un margen mínimo)."""
-    umbral = seg.max_dBFS - 42 if seg.max_dBFS > -90 else -60
-    ini = max(0, detect_leading_silence(seg, silence_threshold=umbral) - 30)
-    fin = max(0, detect_leading_silence(seg.reverse(), silence_threshold=umbral) - 60)
+    umbral = seg.max_dBFS - 50 if seg.max_dBFS > -90 else -65
+    ini = max(0, detect_leading_silence(seg, silence_threshold=umbral) - 60)
+    fin = max(0, detect_leading_silence(seg.reverse(), silence_threshold=umbral) - 160)
     return seg[ini:len(seg) - fin] if len(seg) - fin > ini else seg
 
 

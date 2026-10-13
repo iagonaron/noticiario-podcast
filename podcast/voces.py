@@ -224,8 +224,8 @@ def _piper_tanda(tanda):
     """Una tanda de una sola voz con Piper, con pausas entre turnos como las de una lectura seguida."""
     import random
     from pydub import AudioSegment
+    voces = _piper_cargar()                  # primero: instala Piper si hace falta
     from piper import SynthesisConfig
-    voces = _piper_cargar()
     voz, sid = voces[tanda["turnos"][0]["voz"]]
     total = AudioSegment.silent(duration=300, frame_rate=24000)
     for t in tanda["turnos"]:
@@ -571,7 +571,7 @@ def sintetizar_por_voces(segmentos, carpeta):
                     motores[clave] = modelo
                     hecho = True
                     break
-                except FalloVoz as e:
+                except Exception as e:
                     if _es_cuota(str(e)) or "per day" in str(e).lower():
                         AGOTADOS.add(modelo)
                     avisos.append(f"Voz de {nombre(clave)}: {modelo} no pudo ({str(e)[:160]}); se rehace entera con otro")

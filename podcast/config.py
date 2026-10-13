@@ -29,7 +29,9 @@ PROB_LLUVIA_FRANJA = 40     # % a partir del cual una hora cuenta como «puede l
 UV_PROTECCION = 3           # índice UV a partir del cual se recomienda protección solar
 
 # ---------------------------------------------------------------- guion
-REPARTO = {"titulares": 900, "local": 330, "interes": 520, "distinto": 170}   # palabras por bloque (unos 12 min en total)
+REPARTO = {"distinto": 170}   # palabras del momento Distinto Básico (va aparte, después de las noticias)
+# palabras por noticia de cada bloque: con 7 titulares, 3 locales y 3 de interés salen unos 12 minutos
+PALABRAS_POR_NOTICIA = {"titulares": 155, "local": 120, "interes": 170}
 GUION_PENSAR = os.environ.get("GUION_PENSAR") or "low"   # «low» = el guionista piensa menos y tarda bastante menos
 PLAN_ESPERA_MAX = 420        # segundos desde el inicio que se espera como mucho la propuesta del Distinto Básico
 LOCAL_MAX = 3                # noticias de Coruña y Galicia que entran

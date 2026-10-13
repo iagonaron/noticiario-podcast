@@ -56,16 +56,24 @@ def _bloques(datos):
     return hay
 
 
+def _palabras_bloque(datos, b):
+    if b == "distinto":
+        return config.REPARTO["distinto"]
+    return len(datos.get(b) or []) * config.PALABRAS_POR_NOTICIA[b]
+
+
 def _objetivo(datos):
-    """(mínimo, máximo) de palabras de lo que escribe la IA, según los bloques que hay."""
-    total = sum(config.REPARTO[b] for b in _bloques(datos)) or 600
-    return int(total * 0.9), int(total * 1.1)
+    """(mínimo, máximo) de palabras de lo que escribe la IA, según las noticias que hay hoy."""
+    total = sum(_palabras_bloque(datos, b) for b in _bloques(datos)) or 600
+    return int(total * 0.9), int(total * 1.08)
 
 
 def instrucciones(n_noticias, con_plan, datos=None):
-    datos = datos or {"titulares": 1, "local": 1, "interes": 1, "distinto_basico": con_plan}
+    datos = datos or {"titulares": [1] * 7, "local": [1] * 3, "interes": [1] * 3, "distinto_basico": con_plan}
     minimo, maximo = _objetivo(datos)
-    reparto = ", ".join(f"{b} {config.REPARTO[b]}" for b in _bloques(datos))
+    reparto = ", ".join(f"{b} {_palabras_bloque(datos, b)}" + (f" (unas {config.PALABRAS_POR_NOTICIA[b]} por noticia)"
+                                                               if b in config.PALABRAS_POR_NOTICIA else "")
+                        for b in _bloques(datos))
     plan = """
 MOMENTO DISTINTO BÁSICO (bloque «distinto», el último)
 - Empieza exactamente con: «Y para terminar, el momento Distinto Básico.»
@@ -78,7 +86,8 @@ MOMENTO DISTINTO BÁSICO (bloque «distinto», el último)
 FORMATO: DIÁLOGO CONSTANTE ENTRE DOS VOCES
 - Dos presentadores, voz A y voz B, que se reparten cada noticia en diálogo, al estilo de los pódcast de NotebookLM. Le hablan a Iago de tú.
 - NO se presentan, NO se saludan, NO dicen sus nombres ni el de Iago y NO se despiden: el programa ya tiene su entrada y su salida. Empezad directamente con la primera noticia.
-- Diálogo SIEMPRE: cada noticia la cuentan entre los dos, alternando la voz en cada turno (A, B, A, B…). Nunca dos turnos seguidos de la misma voz, nunca más de 45 palabras en un turno y ninguna noticia contada por una voz sola.
+- Diálogo SIEMPRE: cada noticia la cuentan entre los dos, alternando la voz en cada turno (A, B, A, B…). Nunca dos turnos seguidos de la misma voz y ninguna noticia contada por una voz sola.
+- BREVE: cada noticia en 2 a 4 turnos (solo las dos más importantes del día pueden llegar a 5). Turnos de una o dos frases, nunca más de 35 palabras. Al grano: lo esencial, sin rodeos ni repeticiones.
 - Uno cuenta y el otro pregunta lo que se preguntaría cualquiera («¿y eso en qué me afecta?», «a ver, explícame eso»), reacciona («¡no me digas!», «ojo con esto»), resume o pone un ejemplo. Se van turnando ese papel.
 - Español de España, coloquial y natural. Desenfadado, con humor ligero cuando cuadre, sin pasarse: nada de chistes malos, risas escritas, gritos ni exageraciones.
 - Que se entienda TODO a la primera: palabras sencillas, comparaciones con la vida diaria, cifras redondeadas («casi el doble», «unos ciento sesenta mil»), siglas explicadas, nada de jerga.
@@ -95,7 +104,7 @@ Entre una noticia y la siguiente sonará una ráfaga de música, así que no hac
 QUÉ CONTAR
 - Cuenta TODAS las noticias que te paso ({n_noticias} en total), salvo las repetidas y las que sean solo del tiempo.
 - Para cada noticia: qué ha pasado, explicado fácil; por qué importa o en qué le afecta a una persona normal; y, si lo hay, un detalle curioso o qué va a pasar ahora.
-- Las 2 o 3 más importantes del día, con algo más de calma (4 a 6 turnos). El resto, resumidas (2 o 3 turnos).
+- Las dos más importantes del día, con algo más de calma; el resto, resumidas en dos o tres turnos.
 - Usa SOLO la información que te paso. No inventes datos, nombres, cifras, fechas ni declaraciones.
 - Las noticias en gallego, cuéntalas en castellano.
 - Deportes: NUNCA digas resultados, marcadores, goles ni quién ganó.
@@ -104,7 +113,7 @@ NUMERACIÓN
 - Cada turno lleva «noticia»: el número de la noticia que se está contando, empezando por 1 y siguiendo en orden por todo el programa (los titulares 1, 2, 3…, y local e interes siguen la cuenta). Todos los turnos de una misma noticia llevan el mismo número.{" El momento Distinto Básico es la última." if con_plan else ""}
 
 LONGITUD
-- Entre {minimo} y {maximo} palabras en total: el programa entero dura unos 12 minutos. Reparto orientativo: {reparto}. Mejor quedarse algo corto que largo.
+- Entre {minimo} y {maximo} palabras en total: las noticias tienen que caber en unos 12 minutos. Reparto: {reparto}. NO te pases: mejor quedarse algo corto que largo.
 
 SALIDA
 - Solo el JSON con «segmentos»: cada turno con «bloque», «noticia», «voz» (A o B) y «texto» (exactamente lo que se dice)."""
