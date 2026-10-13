@@ -119,16 +119,68 @@ def portada_es_de_hoy(datos, hoy):
     return False
 
 
+EL_PAIS = "https://elpais.com/expres/"
+CABECERAS_NAVEGADOR = {
+    "User-Agent": util.UA,
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+    "Accept-Language": "es-ES,es;q=0.9,en;q=0.6",
+    "Upgrade-Insecure-Requests": "1",
+    "Sec-Fetch-Dest": "document", "Sec-Fetch-Mode": "navigate", "Sec-Fetch-Site": "none", "Sec-Fetch-User": "?1",
+}
+
+
+def _articulos(html):
+    return (html or "").lower().count("<article")
+
+
+def _elpais_antes(ctx):
+    """El País Exprés se baja ANTES de abrir el noticiario, con una pestaña de navegador de verdad
+    (El País corta a veces las peticiones «de servidor») y, si no, con una petición directa con
+    cabeceras de navegador. Devuelve (html o None, cómo fue)."""
+    intentos = []
+    try:
+        pg = ctx.new_page()
+        resp = pg.goto(EL_PAIS, wait_until="domcontentloaded", timeout=35_000)
+        try:
+            pg.wait_for_selector("article", timeout=8_000)
+        except Exception:
+            pass
+        html, estado = pg.content(), (resp.status if resp else 0)
+        pg.close()
+        if estado < 400 and _articulos(html) >= 3:
+            return html, f"pestaña {estado} · {_articulos(html)} artículos"
+        intentos.append(f"pestaña {estado} · {_articulos(html)} artículos")
+    except Exception as e:
+        intentos.append(f"pestaña: {type(e).__name__}")
+    import requests
+    for _ in range(2):
+        try:
+            r = requests.get(EL_PAIS, headers=CABECERAS_NAVEGADOR, timeout=25)
+            if r.status_code < 400 and _articulos(r.text) >= 3:
+                return r.text, f"directa {r.status_code} · {_articulos(r.text)} artículos"
+            intentos.append(f"directa {r.status_code}")
+        except Exception as e:
+            intentos.append(f"directa: {type(e).__name__}")
+        time.sleep(3)
+    return None, " · ".join(intentos)
+
+
 def recoger(espera_max=300):
     """Devuelve el diccionario con las noticias del día tal y como las ha elegido el noticiario."""
     from playwright.sync_api import sync_playwright
 
     estadistica = {"directas": 0, "por_proxy": 0}
+    elpais = {"html": None}
 
     def atajo(route, request):
         m = RE_PROXY.match(request.url)
         if not m:
             return route.continue_()
+        destino = "https://" + m.group(1)
+        if elpais["html"] and destino.split("?")[0].rstrip("/").endswith("elpais.com/expres"):
+            estadistica["directas"] += 1
+            return route.fulfill(status=200, body=elpais["html"], headers={
+                "content-type": "text/html; charset=utf-8", "access-control-allow-origin": "*"})
         try:
             r = route.fetch(url="https://" + m.group(1), timeout=15000,
                             headers={"User-Agent": util.UA, "Accept-Language": "es-ES,es;q=0.9"})
@@ -148,6 +200,8 @@ def recoger(espera_max=300):
         try:
             ctx = nav.new_context(locale="es-ES", timezone_id=config.ZONA, user_agent=util.UA,
                                   viewport={"width": 1440, "height": 900})
+            elpais["html"], estadistica["elpais"] = _elpais_antes(ctx)
+            util.log(f"El País Exprés: {estadistica['elpais']}")
             ctx.route("**/proxy/**", atajo)
             pagina = ctx.new_page()
             t0 = time.time()
