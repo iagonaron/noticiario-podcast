@@ -6,6 +6,7 @@
     python -m podcast.diagnostico edge|piper → solo una de las voces de reserva (no gastan cupo de Gemini)
     python -m podcast.diagnostico vozlarga   → una tanda larga, como las del episodio (1 petición si va bien)
     python -m podcast.diagnostico guion      → pide un guion de prueba a Gemini con noticias inventadas
+    python -m podcast.diagnostico planes     → propuesta del momento Distinto Básico (va a Dropbox /Pruebas)
 """
 import json
 import re
@@ -114,6 +115,24 @@ def vozlarga():
                       f"errores {errores} · registro: " + "\n".join(voces.REGISTRO))
 
 
+def planes():
+    """Momento Distinto Básico de prueba: la propuesta va a Dropbox (/Pruebas), aquí solo datos técnicos."""
+    from . import planes as pl, dropbox, config, util
+    token = dropbox.token_acceso()
+    crit = dropbox.descargar(token, config.DROPBOX_PLANES_CRITERIOS)
+    criterios = (crit.decode("utf-8-sig", "replace") if crit else
+                 "Planes culturales o de calle en A Coruña para una pareja, de unas tres horas, y comida en un sitio vegano cerca.")
+    hist = dropbox.descargar(token, config.DROPBOX_PLANES_HISTORIAL)
+    historial = [l for l in (hist.decode("utf-8-sig", "replace").splitlines() if hist else []) if l.strip()]
+    t0 = time.time()
+    plan, avisos = pl.proponer(util.ahora().date(), criterios, historial)
+    if plan:
+        dropbox.subir(token, "/Pruebas/plan de prueba.json", json.dumps(plan, ensure_ascii=False, indent=1).encode("utf-8-sig"))
+    nota("Distinto Básico", f"{time.time() - t0:.0f}s · {'propuesta OK' if plan else 'sin propuesta'} · "
+                            f"modelo {plan.get('modelo') if plan else '-'} · fuentes {len(plan.get('fuentes', [])) if plan else 0} · "
+                            f"criterios {'de Dropbox' if crit else 'genéricos'} · avisos: {avisos}"[:3000])
+
+
 def guion():
     from . import guion as g, util
     falsas = {"portada": [{"titulo": f"Noticia de prueba {i}", "fuente": "Prueba", "categoria": "",
@@ -130,6 +149,6 @@ if __name__ == "__main__":
     for prueba in (sys.argv[1:] or ["elpais"]):
         try:
             {"elpais": elpais, "noticias": noticias, "voz": voz, "guion": guion, "edge": edge,
-             "piper": piper, "vozlarga": vozlarga}[prueba]()
+             "piper": piper, "vozlarga": vozlarga, "planes": planes}[prueba]()
         except Exception as e:
             nota(f"Diagnóstico {prueba}", traceback.format_exc()[-1500:], "warning")

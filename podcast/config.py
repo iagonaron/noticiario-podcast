@@ -33,6 +33,9 @@ PALABRAS_MIN = 1550          # lo que escribe la IA (sin lo rápido del principi
 PALABRAS_MAX = 1850
 REPARTO = {"titulares": 750, "local": 300, "interes": 450, "distinto": 170}   # palabras orientativas por bloque
 LOCAL_MAX = 3                # noticias de Coruña y Galicia que entran
+# Momento Distinto Básico: modelos con búsqueda de Google (incluida en el plan gratuito)
+MODELOS_PLANES = [m.strip() for m in (os.environ.get("MODELOS_PLANES") or
+                                      "gemini-3.8-flash,gemini-3.6-flash,gemini-3-flash-preview").split(",") if m.strip()]
 TEXTO_MAX_NOTICIA = 1800     # caracteres de cada noticia que se le pasan al guionista
 
 MODELOS_TEXTO = [m.strip() for m in os.environ.get(
@@ -80,6 +83,8 @@ MOTOR_VOZ = (os.environ.get("MOTOR_VOZ") or "gemini").strip().lower()
 # ---------------------------------------------------------------- Dropbox (carpeta de la app)
 DROPBOX_MP3 = "/Noticiario de hoy.mp3"
 DROPBOX_GUION = "/Guion de hoy.md"
+DROPBOX_PLANES_CRITERIOS = "/Distinto Básico.txt"              # criterios de Iago (solo en Dropbox)
+DROPBOX_PLANES_HISTORIAL = "/Distinto Básico - propuestas.txt"  # lo ya propuesto, para no repetir
 DROPBOX_CUMPLES = "/Cumpleaños.txt"   # la lista de cumpleaños vive SOLO aquí (el repositorio es público)
 DROPBOX_MUSICA = "/musica"   # intro / transicion / cierre (.mp3 o .wav); si no hay, va sin música
 DROPBOX_DIAGNOSTICO = "/Diagnóstico.txt"   # datos técnicos de la última ejecución

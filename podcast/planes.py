@@ -1,0 +1,135 @@
+"""Momento Distinto Básico: una propuesta de plan distinta cada día para Iago y Laura.
+
+Gemini busca en internet (Google Search, incluido en el plan gratuito) siguiendo los criterios
+que Iago tiene en su Distinto Básico. Los criterios viven SOLO en su Dropbox privado
+(«Distinto Básico.txt» en la carpeta del pódcast), nunca en este repositorio público, y lo ya
+propuesto se apunta en «Distinto Básico - propuestas.txt» para no repetir.
+"""
+import datetime as dt
+import json
+import os
+import re
+import time
+
+import requests
+
+from . import config, util
+
+URL = "https://generativelanguage.googleapis.com/v1beta/models/{modelo}:generateContent"
+PROHIBIDO = re.compile(r"acuario|aquarium|zoo\b|zool[oó]gico|delf[ií]n|granja[- ]escuela|circo con animales|"
+                       r"doma|rodeo|corrida|tauri", re.I)
+
+
+def _texto_respuesta(j):
+    partes = (((j.get("candidates") or [{}])[0].get("content") or {}).get("parts")) or []
+    return "".join(p.get("text", "") for p in partes if not p.get("thought")).strip()
+
+
+def _fuentes(j):
+    meta = (j.get("candidates") or [{}])[0].get("groundingMetadata") or {}
+    urls = []
+    for c in meta.get("groundingChunks") or []:
+        w = c.get("web") or {}
+        if w.get("uri"):
+            urls.append(f"{w.get('title') or 'fuente'} · {w['uri']}")
+    return urls[:6]
+
+
+def _json_de(texto):
+    m = re.search(r"\{.*\}", texto or "", re.S)
+    if not m:
+        raise ValueError("la respuesta no trae JSON")
+    return json.loads(m.group(0))
+
+
+def _pregunta(hoy, criterios, historial):
+    fecha = util.fecha_larga(dt.datetime.combine(hoy, dt.time(8)))
+    desde, hasta = hoy + dt.timedelta(days=2), hoy + dt.timedelta(days=9)
+    ya = "\n".join(f"- {l}" for l in historial[-25:]) or "- (ninguno todavía)"
+    return f"""Hoy es {fecha} de {hoy.year}. Busca en internet UNA propuesta de plan para hoy o para los próximos días en A Coruña o alrededores, siguiendo estos criterios de Iago para su «Distinto Básico» (planes en pareja con Laura):
+
+{criterios}
+
+YA PROPUESTOS (no repitas ninguno; si puedes, tampoco el mismo sitio de comida):
+{ya}
+
+CÓMO ELEGIR
+- Varía de un día para otro: unos días algo con fecha entre el {util.fecha_larga(dt.datetime.combine(desde, dt.time(8)))} y el {util.fecha_larga(dt.datetime.combine(hasta, dt.time(8)))} para lo que convenga sacar entradas o reservar con unos días de antelación; otros, algo de esta misma semana o de hoy que se pueda hacer sin organizar casi nada.
+- Comprueba en fuentes de internet la fecha, la hora, el lugar, el precio y si hay que reservar. Si no lo puedes confirmar, elige otro plan: antes algo sencillo y seguro que algo dudoso.
+- Para comer: un sitio vegano o con opción vegana marcada como tal, cerca de la actividad y abierto a esa hora.
+
+Responde SOLO con un objeto JSON, sin texto antes ni después, con estas claves:
+{{"titulo": "nombre del plan",
+ "que_es": "dos o tres frases: qué es, quién lo organiza y qué te encuentras",
+ "por_que": "una frase: por qué les puede gustar a Iago y a Laura",
+ "dia": "AAAA-MM-DD, o null si se puede hacer cualquier día de esta semana",
+ "hora": "HH:MM, o null",
+ "cuando": "cómo se diría en voz alta, p. ej. «el jueves dieciséis a las ocho y media de la tarde»",
+ "lugar": "sitio y barrio o municipio",
+ "precio": "precio para los dos, o «gratis»",
+ "reserva": "si hay que reservar o sacar entradas: dónde y con cuánta antelación; si no, «no hace falta»",
+ "comer": {{"nombre": "...", "donde": "dirección o zona", "que": "qué tienen vegano"}},
+ "visma": "true si puede ir la perra, false si no",
+ "fuente": "URL donde se confirma"}}"""
+
+
+def _valido(p, hoy, historial):
+    if not isinstance(p, dict) or not str(p.get("titulo") or "").strip() or not str(p.get("que_es") or "").strip():
+        return "faltan el título o la descripción"
+    todo = " ".join(str(v) for v in p.values() if isinstance(v, (str, int, float)))
+    if PROHIBIDO.search(todo):
+        return "tiene animales cautivos"
+    if p.get("dia"):
+        try:
+            d = dt.date.fromisoformat(str(p["dia"])[:10])
+        except ValueError:
+            return f"fecha rara: {p['dia']}"
+        if not hoy <= d <= hoy + dt.timedelta(days=14):
+            return f"fecha fuera de plazo: {d}"
+    titulo = util.sin_tildes(str(p["titulo"]).lower())
+    for linea in historial[-40:]:
+        if titulo[:40] and titulo[:40] in util.sin_tildes(linea.lower()):
+            return "repetido"
+    return None
+
+
+def proponer(hoy, criterios, historial):
+    """Devuelve (plan o None, avisos). El plan es un diccionario listo para el guionista."""
+    avisos = []
+    if not criterios or not os.environ.get("GEMINI_API_KEY"):
+        return None, ["Distinto Básico: faltan los criterios o la clave de Gemini"]
+    pregunta = _pregunta(hoy, criterios, historial)
+    for modelo in config.MODELOS_PLANES:
+        for intento in range(2):
+            t0 = time.time()
+            try:
+                r = requests.post(URL.format(modelo=modelo), timeout=180,
+                                  headers={"x-goog-api-key": os.environ["GEMINI_API_KEY"], "Content-Type": "application/json"},
+                                  json={"contents": [{"role": "user", "parts": [{"text": pregunta}]}],
+                                        "tools": [{"google_search": {}}],
+                                        "generationConfig": {"temperature": 0.9}})
+                if r.status_code != 200:
+                    m = re.search(r'"message"\s*:\s*"([^"]{0,160})', r.text)
+                    raise RuntimeError(f"HTTP {r.status_code}: {m.group(1) if m else r.text[:160]}")
+                j = r.json()
+                plan = _json_de(_texto_respuesta(j))
+                motivo = _valido(plan, hoy, historial)
+                if motivo:
+                    raise RuntimeError(f"propuesta descartada ({motivo})")
+                plan["fuentes"] = _fuentes(j)
+                plan["modelo"] = modelo
+                util.log(f"Distinto Básico: {modelo} en {time.time() - t0:.0f}s · {len(plan['fuentes'])} fuentes")
+                return plan, avisos
+            except Exception as e:
+                avisos.append(f"Distinto Básico · {modelo}: {str(e)[:200]}")
+                util.log(avisos[-1])
+                if "HTTP 429" in str(e) or "HTTP 5" in str(e):
+                    time.sleep(10)
+    return None, avisos
+
+
+def linea_historial(hoy, plan):
+    comer = plan.get("comer") or {}
+    return " · ".join(str(x) for x in (hoy.isoformat(), plan.get("titulo"), plan.get("cuando") or plan.get("dia") or "",
+                                       plan.get("lugar") or "", f"comer: {comer.get('nombre', '')}",
+                                       plan.get("fuente") or "") if x)

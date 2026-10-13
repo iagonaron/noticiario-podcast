@@ -63,6 +63,7 @@ MOMENTO DISTINTO BÁSICO (bloque «distinto», el último)
 - Empieza exactamente con: «Y para terminar, el momento Distinto Básico.»
 - Es la propuesta de plan de hoy para Iago y su pareja, Laura (viene en «distinto_basico»). Contadla entre los dos, en diálogo, en 4 a 6 turnos (unas 170 palabras): qué es, explicado a quien no lo conoce; cuándo y dónde; cuánto cuesta; si hay que reservar y con cuánta antelación; y dónde comer vegano cerca. Aquí sí podéis decir por qué les puede gustar.
 - Usa SOLO lo que viene en «distinto_basico»: ni fechas, ni horas, ni precios, ni sitios inventados. Si un dato no viene, no lo digas. Las direcciones web no se leen.
+- Si en «visma» pone true, podéis decir que Visma, su perra, también puede ir.
 """ if con_plan else ""
     return f"""Escribes el guion de un pódcast diario de noticias que escucha una sola persona, Iago, por la mañana en A Coruña.
 
@@ -75,7 +76,7 @@ FORMATO: DIÁLOGO CONSTANTE ENTRE DOS VOCES
 - Que se entienda TODO a la primera: palabras sencillas, comparaciones con la vida diaria, cifras redondeadas («casi el doble», «unos ciento sesenta mil»), siglas explicadas, nada de jerga.
 - Escribe las cifras con letras, tal como se dicen («dos mil veintiséis», «el veinticinco por ciento»).
 - Escribe solo lo que se dice: sin acotaciones, sin nombres delante, sin paréntesis, sin enlaces, sin listas, sin emojis.
-- No des por hecho los gustos, costumbres o planes de Iago ni le digas qué le va a interesar{" (salvo en el momento Distinto Básico, que es para eso)" if con_plan else ""}. Nada de perros, paseos ni desayunos.
+- No des por hecho los gustos, costumbres o planes de Iago ni le digas qué le va a interesar{" (salvo en el momento Distinto Básico, que es para eso)" if con_plan else ""}. Fuera de ese momento, nada de perros, paseos ni desayunos.
 
 BLOQUES, EN ESTE ORDEN (antes, el programa ya dice la fecha, los cumpleaños, la agenda y el tiempo: no hables de eso)
 1. titulares: las noticias de «titulares» (la portada de El País Exprés). Empieza directamente con la primera, sin preámbulos.
