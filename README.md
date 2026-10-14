@@ -78,7 +78,9 @@ Los registros de GitHub solo muestran datos técnicos.
 - **Pausar**: Actions → «Noticiario Podcast» → `···` → *Disable workflow*, y pausa también la
   tarea programada «Despertador del Noticiario Podcast» en Claude.
 - **Ojo con las pruebas**: el cupo diario gratuito de Gemini se renueva hacia las 9:00 de Madrid
-  (medianoche en California). Lo que se gaste en pruebas después de las 9:00 sale del cupo del episodio de la
-  mañana siguiente; mejor probar con `prueba` = `si` y `modelos_voz` = `piper:local`.
+  (medianoche en California), y cada modelo de voz admite 10 peticiones al día (un episodio gasta 4).
+  Lo que se gaste en pruebas después de las 9:00 sale del cupo del episodio de la mañana siguiente.
+  Por eso, con `prueba` = `si` el robot ya no usa los modelos principales (ni de voz ni de texto),
+  y con `modelos_voz` = `piper:local` no gasta nada de voz.
 - **Quitarlo del todo**: borrar este repositorio y, en Dropbox, la app «Noticiario Podcast»
   (dropbox.com/account/connected_apps). Nada más depende de él.

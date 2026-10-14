@@ -36,15 +36,24 @@ PALABRAS_POR_NOTICIA = {"titulares": 140, "local": 110, "interes": 150}
 GUION_PENSAR = os.environ.get("GUION_PENSAR") or ""
 PLAN_ESPERA_MAX = 420        # segundos desde el inicio que se espera como mucho la propuesta del Distinto Básico
 LOCAL_MAX = 3                # noticias de Coruña y Galicia que entran
-# Momento Distinto Básico: modelos con búsqueda de Google (incluida en el plan gratuito)
-MODELOS_PLANES = [m.strip() for m in (os.environ.get("MODELOS_PLANES") or
-                                      "gemini-3.8-flash,gemini-3.6-flash,gemini-3-flash-preview").split(",") if m.strip()]
+# Pruebas (PRUEBA=si): el resultado va a la subcarpeta «Pruebas» de Dropbox y, además, se usan
+# otros modelos de Gemini. El cupo diario gratuito es pequeño y se renueva a medianoche de
+# California (las 9:00 en Madrid), así que una prueba hecha durante el día sale del cupo del
+# episodio de la mañana siguiente: el 14-oct-2026 las pruebas del día anterior dejaron a una de
+# las voces sin el modelo principal. En prueba nunca se tocan los modelos principales, salvo
+# que se pidan a propósito con MODELOS_VOZ, MODELOS_TEXTO o MODELOS_PLANES.
+PRUEBA = (os.environ.get("PRUEBA") or "").lower() in ("si", "sí", "true", "1")
+
+# Momento Distinto Básico: modelos que leen las agendas (herramienta url_context, gratuita)
+MODELOS_PLANES = [m.strip() for m in (os.environ.get("MODELOS_PLANES") or (
+    "gemini-3.6-flash,gemini-3-flash-preview" if PRUEBA else
+    "gemini-3.8-flash,gemini-3.6-flash,gemini-3-flash-preview")).split(",") if m.strip()]
 TEXTO_MAX_NOTICIA = 1800     # caracteres de cada noticia que se le pasan al guionista
 
-MODELOS_TEXTO = [m.strip() for m in os.environ.get(
-    "MODELOS_TEXTO",
-    "gemini-3.8-flash,gemini-3.6-flash,gemini-3-flash-preview,gemini-3.5-flash-lite,gemini-3.1-flash-lite",
-).split(",") if m.strip()]
+MODELOS_TEXTO = [m.strip() for m in (os.environ.get("MODELOS_TEXTO") or (
+    "gemini-3.6-flash,gemini-3-flash-preview,gemini-3.5-flash-lite,gemini-3.1-flash-lite" if PRUEBA else
+    "gemini-3.8-flash,gemini-3.6-flash,gemini-3-flash-preview,gemini-3.5-flash-lite,gemini-3.1-flash-lite"
+)).split(",") if m.strip()]
 
 # ---------------------------------------------------------------- voces
 # Dos presentadores que conversan (estilo NotebookLM). A abre el programa.
@@ -69,10 +78,13 @@ ESTILO_VOZ = os.environ.get("ESTILO_VOZ") or (
     "charla desenfadada entre amigos, español de España, natural, ágil y muy clara")
 
 # Orden de intentos para la voz de Gemini: (forma de llamarla, modelo).
-# OJO: en el plan gratuito cada modelo de voz admite unas 10 peticiones al día (el cupo se
-# renueva a las 00:00 UTC, las 2:00 en Madrid), así que el episodio se genera en pocas tandas
-# largas y, si un modelo se queda sin cupo a mitad, se sigue con el siguiente.
-_MODELOS_VOZ_DEFECTO = ("interactions:gemini-3.8-flash-tts,interactions:gemini-3.8-flash-lite-tts,"
+# OJO: en el plan gratuito cada modelo de voz admite 10 peticiones al día (el cupo se renueva a
+# medianoche de California, las 9:00 en Madrid; el aviso de error de Google dice otra hora, pero
+# no es la real). Un episodio gasta 4 (2 tandas por voz). Si el modelo principal se queda sin cupo
+# a mitad de una voz, esa voz entera se rehace con el siguiente, para que no cambie de timbre.
+_MODELOS_VOZ_DEFECTO = ("interactions:gemini-3.8-flash-lite-tts,generate:gemini-3.1-flash-tts-preview,"
+                        "generate:gemini-2.5-flash-preview-tts" if PRUEBA else
+                        "interactions:gemini-3.8-flash-tts,interactions:gemini-3.8-flash-lite-tts,"
                         "generate:gemini-3.1-flash-tts-preview,generate:gemini-2.5-flash-preview-tts")
 MODELOS_VOZ = [tuple(x.strip().split(":", 1)) for x in
                (os.environ.get("MODELOS_VOZ") or _MODELOS_VOZ_DEFECTO).split(",") if ":" in x]
@@ -87,8 +99,7 @@ MOTOR_VOZ = (os.environ.get("MOTOR_VOZ") or "gemini").strip().lower()
 
 # ---------------------------------------------------------------- Dropbox (carpeta de la app)
 # En las pruebas (PRUEBA=si) todo va a la subcarpeta «Pruebas», para no pisar el episodio del día
-_PREFIJO = "/Pruebas" if (os.environ.get("PRUEBA") or "").lower() in ("si", "sí", "true", "1") else ""
-PRUEBA = bool(_PREFIJO)
+_PREFIJO = "/Pruebas" if PRUEBA else ""
 DROPBOX_MP3 = _PREFIJO + "/Noticiario de hoy.mp3"
 DROPBOX_GUION = _PREFIJO + "/Guion de hoy.md"
 DROPBOX_PLANES_CRITERIOS = "/Distinto Básico.txt"              # criterios de Iago (solo en Dropbox)
