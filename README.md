@@ -1,6 +1,6 @@
 # Noticiario Podcast
 
-Cada mañana, hacia las 7:20 (hora de Madrid), un robot de GitHub monta un pódcast de unos 12
+Cada mañana, a partir de las 7:16 (hora de Madrid), un robot de GitHub monta un pódcast de unos 12
 minutos con lo que trae el [noticiario](https://noticiarioiago.netlify.app/), más un plan del
 «Distinto Básico» al final, y lo deja en Dropbox, listo para escuchar en el iPhone: un diálogo
 entre dos voces, con música de informativo. Funciona solo, con el ordenador apagado y con
@@ -30,6 +30,17 @@ servicios gratuitos.
 7. **Montaje** de informativo: la música (`musica/fondo.mp3` en Dropbox) suena arriba al empezar,
    baja cuando hablan, sube 2-3 segundos entre noticias y cierra arriba. Volumen de pódcast y MP3.
 8. **Dropbox**: sustituye `Noticiario de hoy.mp3` y `Guion de hoy.md` en la carpeta de la app.
+
+## Quién lo arranca cada mañana
+
+- **El despertador**: una tarea programada de Claude, en la nube (no hace falta ningún ordenador
+  encendido), que cada día a las 7:16 de Madrid lo lanza con *Run workflow* y `forzar` = `no`,
+  espera a que acabe y, si falla, lo relanza una vez. Existe porque el reloj de GitHub no es de
+  fiar: el 13 y el 14 de octubre de 2026 no arrancó a su hora la cita de las 7:20 ni las siguientes.
+- **De respaldo**, las citas propias de GitHub: cada 10 minutos de 7:17 a 9:57 (en invierno, de
+  7:17 a 8:57).
+- Arranque quien arranque, el robot mira primero si el episodio de hoy ya está en Dropbox
+  (`podcast/toca.py`): si ya está, no hace nada; así nunca se genera dos veces ni se gasta cupo.
 
 ## Lo privado no está aquí
 
@@ -64,6 +75,10 @@ Los registros de GitHub solo muestran datos técnicos.
   deja «Comprobación.txt» en Dropbox).
 - **Qué pasó en cada ejecución**: «Diagnóstico.txt» en la carpeta del pódcast en Dropbox (fuentes,
   tiempos, modelos de voz usados y avisos).
-- **Pausar**: Actions → «Noticiario Podcast» → `···` → *Disable workflow*.
+- **Pausar**: Actions → «Noticiario Podcast» → `···` → *Disable workflow*, y pausa también la
+  tarea programada «Despertador del Noticiario Podcast» en Claude.
+- **Ojo con las pruebas**: el cupo diario gratuito de Gemini se renueva hacia las 9:00 de Madrid
+  (medianoche en California). Lo que se gaste en pruebas después de las 9:00 sale del cupo del episodio de la
+  mañana siguiente; mejor probar con `prueba` = `si` y `modelos_voz` = `piper:local`.
 - **Quitarlo del todo**: borrar este repositorio y, en Dropbox, la app «Noticiario Podcast»
   (dropbox.com/account/connected_apps). Nada más depende de él.

@@ -1,9 +1,10 @@
 """¿Toca generar el episodio ahora? Se ejecuta antes de instalar nada (solo librería estándar).
 
-GitHub programa en hora universal, así que el flujo salta a varias horas y aquí se decide:
-- a mano (FORZAR=si) → siempre;
+Lo arrancan el despertador de Claude (7:16, a mano con forzar=no) y, de respaldo, las citas de
+GitHub (en hora universal, cada 10 minutos). Aquí se decide:
+- a mano con FORZAR=si (el «Run workflow» de siempre) → siempre;
 - si no, solo entre las 7:15 y las 11:00 de Madrid y si el MP3 de hoy aún no está en Dropbox.
-Así la segunda llamada de la mañana sirve de reintento si la primera falló o GitHub la saltó.
+Así cada llamada siguiente sirve de reintento si la anterior falló o GitHub se la saltó.
 """
 import datetime as dt
 import os

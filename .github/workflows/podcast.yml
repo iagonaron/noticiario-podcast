@@ -1,20 +1,29 @@
 # El robot del Noticiario Podcast.
-# GitHub programa en hora universal (UTC) y a veces se salta o retrasa mucho una cita (el
-# 13-oct-2026 no lanzó la de las 5:20), así que hay varias cada cuarto de hora y el propio
-# robot decide (podcast/toca.py): genera la primera vez que salta a partir de las 7:15 de
-# Madrid, en verano y en invierno, y las demás ven que ya está hecho y no hacen nada.
+# Quién lo arranca cada mañana:
+# 1) El despertador: una tarea programada de Claude (en la nube) que a las 7:16 de Madrid lo
+#    lanza con «Run workflow» y forzar=no. Existe porque el reloj de GitHub no es de fiar: el
+#    13 y el 14-oct-2026 no arrancó a su hora la cita de las 7:20 ni las siguientes.
+# 2) De respaldo, las citas propias de GitHub, cada 10 minutos (hora universal, UTC).
+# Sea quien sea, el propio robot decide (podcast/toca.py): genera la primera vez que salta a
+# partir de las 7:15 de Madrid, en verano y en invierno, y las demás ven que el de hoy ya está
+# en Dropbox y no hacen nada (tardan unos segundos).
 #
-# Para pausarlo: pestaña Actions → «Noticiario Podcast» → «···» → Disable workflow.
+# Para pausarlo: pestaña Actions → «Noticiario Podcast» → «···» → Disable workflow (y pausar
+# también el despertador en las tareas programadas de Claude).
 # Para probarlo cuando quieras: Actions → «Noticiario Podcast» → Run workflow.
 
 name: Noticiario Podcast
 
 on:
   schedule:
-    - cron: "20,35,50 5,6 * * *"   # verano (UTC+2): 7:20, 7:35, 7:50 y reintentos · invierno (UTC+1): desde las 7:20
-    - cron: "5,20 7 * * *"         # últimos reintentos
+    - cron: "17,27,37,47,57 5-7 * * *"   # verano (UTC+2): de 7:17 a 9:57 · invierno (UTC+1): de 6:17 a 8:57 (antes de las 7:15 no hace nada)
   workflow_dispatch:
     inputs:
+      forzar:
+        description: "Generar aunque el de hoy ya esté en Dropbox (si/no). El despertador de Claude usa «no»"
+        required: false
+        default: "si"
+        type: string
       modelos_voz:
         description: "Solo para pruebas: modelos de voz a usar (vacío = los de siempre)"
         required: false
@@ -43,7 +52,7 @@ jobs:
     env:
       TZ: Europe/Madrid
       PYTHONUNBUFFERED: "1"
-      FORZAR: ${{ github.event_name == 'workflow_dispatch' && 'si' || 'no' }}
+      FORZAR: ${{ github.event_name == 'workflow_dispatch' && (inputs.forzar || 'si') || 'no' }}
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       DROPBOX_APP_KEY: ${{ secrets.DROPBOX_APP_KEY }}
       DROPBOX_APP_SECRET: ${{ secrets.DROPBOX_APP_SECRET }}
