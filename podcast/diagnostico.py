@@ -156,10 +156,16 @@ TURNOS_PRUEBA = [
 
 
 def cortes():
-    """Una tanda de una voz como las del episodio: se corta en turnos y luego cada trozo se transcribe
-    por separado para ver si empieza y acaba donde debe (solo cifras)."""
-    from . import voces, alinear, config
+    """Una tanda de una voz como las del episodio (1 petición): se corta en turnos y luego cada trozo se
+    transcribe por separado para ver si empieza y acaba donde debe. Con SIN_ETIQUETA=si se pide sin la
+    etiqueta de pausa entre turnos (el caso difícil). El lote queda en Dropbox para «recortar»."""
+    import json
+    import os
+    import subprocess
+    from . import voces, alinear, config, dropbox
     via, modelo = config.MODELOS_VOZ[0]
+    if (os.environ.get("SIN_ETIQUETA") or "").lower() in ("si", "sí", "1", "true"):
+        voces.SIN_PAUSAS.add(modelo)
     lote = list(enumerate(TURNOS_PRUEBA))
     t0 = time.time()
     try:
@@ -167,21 +173,36 @@ def cortes():
     except Exception as e:
         nota("Cortes", f"FALLO {modelo}: {str(e)[:600]} · registro: " + " | ".join(voces.REGISTRO[-6:]), "warning")
         return
-    malos = []
     m = alinear._modelo()
+    cuentas = {}
     for i, texto in lote:
-        x = alinear.a_mono16k(piezas[i])
-        segs, _ = m.transcribe(x, language="es", beam_size=1, vad_filter=False) if m else ([], None)
-        oido = "".join(alinear.norma(" ".join(sg.text for sg in segs)))
-        esperado = "".join(alinear.norma(texto))
-        import difflib
-        # sin espacios ni signos: el principio y el final de lo oído tienen que parecerse a los del turno
-        ok_ini = difflib.SequenceMatcher(None, oido[:8], esperado[:8]).ratio() >= 0.6
-        ok_fin = difflib.SequenceMatcher(None, oido[-8:], esperado[-8:]).ratio() >= 0.6
-        if not (ok_ini and ok_fin):
-            malos.append(f"turno {i + 1}: oído «{oido[:12]} … {oido[-12:]}» (esperado «{esperado[:12]} … {esperado[-12:]}»)")
-    nota("Cortes", f"{modelo} ({via}) · {len(lote)} turnos en {time.time() - t0:.0f}s · trozos mal cortados: {len(malos)} · "
-                   f"{' | '.join(malos)} · registro: " + " | ".join(voces.REGISTRO[-4:]))
+        segs, _ = m.transcribe(alinear.a_mono16k(piezas[i]), language="es", beam_size=1, vad_filter=False,
+                               condition_on_previous_text=False) if m else ([], None)
+        oido = alinear.norma(" ".join(sg.text for sg in segs))
+        previo = alinear.norma(TURNOS_PRUEBA[i - 1]) if i > 0 else []
+        siguiente = alinear.norma(TURNOS_PRUEBA[i + 1]) if i + 1 < len(TURNOS_PRUEBA) else []
+        problemas = _bordes(oido, alinear.norma(texto), previo, siguiente)
+        largos = _huecos(piezas[i])
+        if largos:
+            problemas.append("hueco")
+        for p in problemas:
+            cuentas[p] = cuentas.get(p, 0) + 1
+            if p != "hueco":
+                print(f"turno {i + 1}: {p} · oído «{' '.join(oido)}»", flush=True)
+    try:
+        token = dropbox.token_acceso()
+        carpeta = "/Pruebas/Crudo del diagnóstico"
+        lista = []
+        for k, c in enumerate(voces.CRUDOS, 1):
+            mp3 = subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-i", "pipe:0", "-c:a", "libmp3lame",
+                                  "-b:a", "96k", "-f", "mp3", "pipe:1"], input=c["wav"], capture_output=True, check=True).stdout
+            dropbox.subir(token, f"{carpeta}/lote {k}.mp3", mp3)
+            lista.append(dict({k2: v for k2, v in c.items() if k2 != "wav"}, fichero=f"lote {k}.mp3"))
+        dropbox.subir(token, f"{carpeta}/lotes.json", json.dumps({"lotes": lista}, ensure_ascii=False).encode("utf-8"))
+    except Exception as e:
+        nota("Cortes", f"no se pudo guardar el lote: {e}"[:300], "warning")
+    nota("Cortes", f"{modelo} ({via}) · pausas {modelo not in voces.SIN_PAUSAS} · {len(lote)} turnos en "
+                   f"{time.time() - t0:.0f}s · problemas: {cuentas or 'ninguno'} · registro: " + " | ".join(voces.REGISTRO[-3:]))
 
 
 def busqueda():

@@ -13,6 +13,11 @@ on:
         description: "Modelos de voz a probar (vacío = los de siempre)"
         required: false
         type: string
+      sin_etiqueta:
+        description: "Para «cortes»: pedir el lote sin la etiqueta de pausa entre turnos (si/no)"
+        required: false
+        default: "no"
+        type: string
       crudo:
         description: "Para «recortar»: carpeta de Dropbox con los lotes guardados (vacío = /Pruebas/Crudo de la prueba)"
         required: false
@@ -33,6 +38,7 @@ jobs:
       PRUEBAS: ${{ inputs.pruebas }}
       MODELOS_VOZ: ${{ inputs.modelos_voz }}
       CRUDO: ${{ inputs.crudo }}
+      SIN_ETIQUETA: ${{ inputs.sin_etiqueta }}
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
