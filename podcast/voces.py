@@ -587,7 +587,8 @@ def sintetizar_por_voces(segmentos, carpeta):
             for via, modelo in config.MODELOS_VOZ:
                 if modelo in AGOTADOS:
                     continue
-                anota(f"Voz de {nombre(clave)} con {modelo} ({via}) · {len(turnos)} turnos en {len(lotes)} lotes")
+                anota(f"Voz de {nombre(clave)} ({config.LOCUTORES[clave]['gemini']}) con {modelo} ({via}) · "
+                      f"{len(turnos)} turnos en {len(lotes)} lotes")
                 try:
                     wavs.update(_voz_con_modelo(via, modelo, clave, lotes))
                     motores[clave] = modelo

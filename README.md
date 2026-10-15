@@ -65,7 +65,7 @@ Los registros de GitHub solo muestran datos técnicos.
 - **Días señalados**: edita `dias_senalados.txt` (y los festivos locales, en `podcast/festivos.py`).
 - **Cumpleaños**: edita `Cumpleaños.txt` en la carpeta del pódcast en Dropbox.
 - **Voces**: en Settings → Secrets and variables → Actions → *Variables*, crea `VOZ_A` /
-  `VOZ_B` con el nombre de una voz de Gemini (ahora Kore y Puck; otras: Aoede, Leda,
+  `VOZ_B` con el nombre de una voz de Gemini (ahora Kore y Charon; otras: Aoede, Leda, Puck,
   Charon, Orus, Achird, Sulafat) o `MOTOR_VOZ` = `edge` para usar solo las voces de Microsoft.
 
 ## Pausar, probar o deshacer

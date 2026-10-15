@@ -67,7 +67,7 @@ LOCUTORES = {
     },
     "B": {
         "nombre": os.environ.get("NOMBRE_B") or "Martín",
-        "gemini": os.environ.get("VOZ_B") or "Puck",
+        "gemini": os.environ.get("VOZ_B") or "Charon",   # voz grave (antes Puck)
         "edge": os.environ.get("EDGE_B") or "es-ES-AlvaroNeural",
         "piper": os.environ.get("PIPER_B") or "es_ES-davefx-medium",
     },
