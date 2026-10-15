@@ -20,6 +20,7 @@ import numpy as np
 from . import config, util
 
 SR = 16000          # frecuencia de trabajo para el análisis
+_REGLA_VIEJA = bool(__import__("os").environ.get("CORTES_VIEJOS"))   # solo para el diagnóstico «recortar»
 PASO = 0.01         # resolución de la envolvente (10 ms)
 _MODELO = {"m": None, "error": None}
 
@@ -310,6 +311,11 @@ def cortes(wav_bytes, textos):
         if not (a and b) or b["ini"] < a["fin"] - 0.03:
             continue
         bordes += 1 if (a["resto_fin"] or b["resto_ini"]) else 0
+        if _REGLA_VIEJA:            # solo para comparar en el diagnóstico: el silencio más largo entre L y R
+            L, R = a["fin"], b["ini"]
+            dentro = [(s0, s1, d) for s0, s1, d in sil if L - 0.06 <= (s0 + s1) / 2 <= R + 0.06]
+            fijos[k] = (sum(max(dentro, key=lambda z: z[2])[:2]) / 2) if dentro else _punto_mas_bajo(env, L, R)
+            continue
         fijos[k] = _frontera(env, umbral, sil, a, b, ritmo)
     # las fronteras fijadas tienen que ir en orden
     ultimo = -1.0

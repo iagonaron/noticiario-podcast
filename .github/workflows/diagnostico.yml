@@ -18,6 +18,11 @@ on:
         required: false
         default: "no"
         type: string
+      cortes_viejos:
+        description: "Para «recortar»: cortar con la regla de antes del 15-oct, para comparar (si/no)"
+        required: false
+        default: "no"
+        type: string
       crudo:
         description: "Para «recortar»: carpeta de Dropbox con los lotes guardados (vacío = /Pruebas/Crudo de la prueba)"
         required: false
@@ -39,6 +44,7 @@ jobs:
       MODELOS_VOZ: ${{ inputs.modelos_voz }}
       CRUDO: ${{ inputs.crudo }}
       SIN_ETIQUETA: ${{ inputs.sin_etiqueta }}
+      CORTES_VIEJOS: ${{ inputs.cortes_viejos == 'si' && '1' || '' }}
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
