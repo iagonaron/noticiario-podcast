@@ -10,6 +10,11 @@
     hace falta oír la voz de Gemini, con `modelos_voz` = `piper:local`.
   - Como mucho una prueba al día con el modelo de voz principal, y solo si hace falta de verdad.
   - Los modos del flujo «Diagnóstico» que generan voz (voz, vozlarga, cortes) también gastan cupo.
+- Voces: Lucía = Kore, Martín = Algieba (la eligió Iago el 15-oct-2026 entre voces graves; antes Puck).
+- Cortes: cada lote de voz se guarda tal cual en Dropbox (/Pruebas/Crudo del episodio, o «Crudo de la
+  prueba»), con sus textos y cortes. Si Iago oye un corte mal hecho, el flujo «Diagnóstico» con
+  `pruebas` = `recortar` (y `crudo` = esa carpeta) vuelve a cortar esos lotes sin gastar cupo y deja el
+  detalle en /Pruebas/Recorte - informe.txt; `cortes_viejos` = `si` compara con la regla anterior.
 - Desde esta sesión GraphQL no funciona: usa `gh api` (REST). Los registros de las ejecuciones no se
   pueden descargar; lo útil está en las anotaciones del trabajo
   (`gh api repos/iagonaron/noticiario-podcast/check-runs/<job_id>/annotations`) y en
