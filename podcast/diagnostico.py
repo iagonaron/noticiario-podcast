@@ -216,6 +216,36 @@ def busqueda():
             nota(f"Búsqueda {nombre}", f"FALLO {e}", "warning")
 
 
+VOCES_MUESTRA = ["Charon", "Algenib", "Algieba", "Orus"]   # voces graves de hombre de Gemini
+TEXTO_MUESTRA = ("Hoy es jueves, quince de octubre. Empezamos con los titulares. El Gobierno ha presentado esta "
+                 "mañana su plan de vivienda, y la idea es que llegue a los alquileres antes del verano. Y ojo, "
+                 "porque en Coruña también hay novedades: el puerto abre por fin el paseo nuevo de la dársena.")
+
+
+def muestras():
+    """Una muestra corta de cada voz candidata (1 petición por voz), en MP3 en Dropbox
+    /Pruebas/Voces para Martín/, para elegir de oído."""
+    import os
+    import subprocess
+    from . import voces, config, dropbox
+    via, modelo = config.MODELOS_VOZ[0]
+    lista = [v.strip() for v in (os.environ.get("VOCES_MUESTRA") or ",".join(VOCES_MUESTRA)).split(",") if v.strip()]
+    token = dropbox.token_acceso()
+    for n, nombre_voz in enumerate(lista, 1):
+        config.LOCUTORES["B"]["gemini"] = nombre_voz
+        tanda = {"bloque": "titulares", "turnos": [{"voz": "B", "texto": TEXTO_MUESTRA}]}
+        t0 = time.time()
+        try:
+            wav = voces._llamada(via, modelo, tanda)
+            mp3 = subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-i", "pipe:0",
+                                  "-af", "loudnorm=I=-16:TP=-1.5", "-c:a", "libmp3lame", "-b:a", "128k",
+                                  "-f", "mp3", "pipe:1"], input=wav, capture_output=True, check=True).stdout
+            dropbox.subir(token, f"/Pruebas/Voces para Martín/{n} {nombre_voz}.mp3", mp3)
+            nota(f"Muestra {nombre_voz}", f"OK en {time.time() - t0:.0f}s · {voces.duracion_wav(wav):.1f}s · {modelo}")
+        except Exception as e:
+            nota(f"Muestra {nombre_voz}", f"FALLO {modelo}: {str(e)[:500]}", "warning")
+
+
 def guion():
     from . import guion as g, util
     falsas = {"portada": [{"titulo": f"Noticia de prueba {i}", "fuente": "Prueba", "categoria": "",
@@ -232,6 +262,7 @@ if __name__ == "__main__":
     for prueba in (sys.argv[1:] or ["elpais"]):
         try:
             {"elpais": elpais, "noticias": noticias, "voz": voz, "guion": guion, "edge": edge,
-             "piper": piper, "vozlarga": vozlarga, "planes": planes, "busqueda": busqueda, "cortes": cortes}[prueba]()
+             "piper": piper, "vozlarga": vozlarga, "planes": planes, "busqueda": busqueda, "cortes": cortes,
+             "muestras": muestras}[prueba]()
         except Exception as e:
             nota(f"Diagnóstico {prueba}", traceback.format_exc()[-1500:], "warning")
