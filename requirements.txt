@@ -6,3 +6,4 @@ recurring-ical-events>=3.3
 pydub>=0.25
 holidays>=0.60
 faster-whisper
+num2words>=0.5.13

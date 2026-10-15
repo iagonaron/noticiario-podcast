@@ -13,6 +13,10 @@ on:
         description: "Modelos de voz a probar (vacío = los de siempre)"
         required: false
         type: string
+      crudo:
+        description: "Para «recortar»: carpeta de Dropbox con los lotes guardados (vacío = /Pruebas/Crudo de la prueba)"
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -28,6 +32,7 @@ jobs:
       DROPBOX_REFRESH_TOKEN: ${{ secrets.DROPBOX_REFRESH_TOKEN }}
       PRUEBAS: ${{ inputs.pruebas }}
       MODELOS_VOZ: ${{ inputs.modelos_voz }}
+      CRUDO: ${{ inputs.crudo }}
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6

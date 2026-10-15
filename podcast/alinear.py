@@ -29,10 +29,30 @@ class ErrorAlineado(Exception):
 
 
 # ---------------------------------------------------------------- utilidades
-def norma(texto):
+try:                                   # la transcripción escribe las cifras con números y el guion, con letras
+    from num2words import num2words as _num2words
+except Exception:                      # pragma: no cover
+    _num2words = None
+
+
+def _fichas(texto):
     t = unicodedata.normalize("NFD", (texto or "").lower())
     t = "".join(c for c in t if unicodedata.category(c) != "Mn")
     return re.findall(r"[a-z0-9ñ]+", t)
+
+
+def norma(texto):
+    """Palabras en minúsculas, sin tildes ni signos, y las cifras dichas con letras («2026» → dos mil veintiseis)."""
+    salida = []
+    for tok in _fichas(texto):
+        if _num2words and tok.isdigit() and len(tok) <= 9:
+            try:
+                salida += _fichas(_num2words(int(tok), lang="es"))
+                continue
+            except Exception:
+                pass
+        salida.append(tok)
+    return salida
 
 
 def a_mono16k(wav_bytes):
@@ -131,17 +151,68 @@ def _coincidencias(textos, rec):
     sm = difflib.SequenceMatcher(None, exp, [r[0] for r in rec], autojunk=False)
     mapa = {}
     for a, b, n in sm.get_matching_blocks():
-        for k in range(n):
-            mapa[a + k] = b + k
+        # una palabra corta suelta («no», «y», «de») que coincide sola suele ser de otro sitio
+        if n >= 2 or (n == 1 and len(exp[a]) >= 4):
+            for k in range(n):
+                mapa[a + k] = b + k
     salida = []
     for i in range(len(textos)):
-        idx = [j for j in range(len(exp)) if dueno[j] == i and j in mapa]
+        suyas = [j for j in range(len(exp)) if dueno[j] == i]
+        idx = [j for j in suyas if j in mapa]
         # se descartan coincidencias sueltas de una sola palabra corta (suelen ser «y», «de»…)
         if len(idx) >= 2 or (len(idx) == 1 and len(exp[idx[0]]) >= 4):
-            salida.append({"ini": rec[mapa[idx[0]]][1], "fin": rec[mapa[idx[-1]]][2], "n": len(idx)})
+            # letras del turno que quedan antes de la primera palabra reconocida y después de la última
+            # (una coletilla como «¿eh?» o una cifra que no se reconoció): también son de este turno
+            antes = sum(len(exp[j]) + 1 for j in suyas if j < idx[0])
+            despues = sum(len(exp[j]) + 1 for j in suyas if j > idx[-1])
+            salida.append({"ini": rec[mapa[idx[0]]][1], "fin": rec[mapa[idx[-1]]][2], "n": len(idx),
+                           "letras": sum(len(exp[j]) + 1 for j in idx[0:1] + [j for j in suyas if idx[0] < j <= idx[-1]]),
+                           "resto_ini": antes, "resto_fin": despues})
         else:
             salida.append(None)
     return salida, len(mapa) / max(1, len(exp))
+
+
+def _ritmo(turnos, env, umbral):
+    """Letras por segundo de voz (sin contar las pausas) de esta voz, medidas en los propios turnos
+    reconocidos; por defecto, 16."""
+    datos = []
+    for t in turnos:
+        if t and t["fin"] - t["ini"] > 1.0:
+            voz = _voz_entre(env, umbral, t["ini"], t["fin"])
+            if voz > 0.5:
+                datos.append(t["letras"] / voz)
+    return float(np.median(datos)) if len(datos) >= 3 else 16.0
+
+
+def _voz_entre(env, umbral, a, b):
+    """Segundos con voz (envolvente por encima del umbral de silencio) entre a y b."""
+    i, j = int(max(0.0, a) / PASO), int(max(0.0, b) / PASO)
+    return float((env[i:j] >= umbral).sum()) * PASO if j > i else 0.0
+
+
+def _frontera(env, umbral, sil, a, b, ritmo):
+    """Dónde cortar entre el turno a y el siguiente b (ya reconocidos los dos).
+
+    Entre la última palabra reconocida de a (L) y la primera de b (R) puede quedar voz que no se
+    reconoció: el final de a (una coletilla, una cifra…) y el principio de b. Se elige el silencio
+    que deja antes la voz que le falta a a y después la que le falta a b y, a igualdad, el más largo.
+    Así el «¿eh?» del final de un turno no se va al principio del siguiente."""
+    L, R = a["fin"], b["ini"]
+    falta_a, falta_b = a["resto_fin"] / ritmo, b["resto_ini"] / ritmo
+    dentro = [(s0, s1, d) for s0, s1, d in sil if L - 0.06 <= (s0 + s1) / 2 <= R + 0.06]
+    if not dentro:
+        lo, hi = L + falta_a * 0.8, R - falta_b * 0.8
+        return _punto_mas_bajo(env, lo, hi) if hi > lo else _punto_mas_bajo(env, L, R)
+
+    def coste(s):
+        s0, s1, d = s
+        antes = _voz_entre(env, umbral, L, s0)
+        despues = _voz_entre(env, umbral, s1, R)
+        return abs(antes - falta_a) + abs(despues - falta_b) - 0.25 * math.log(max(d, 0.05) / 0.1)
+
+    s0, s1, _ = min(dentro, key=coste)
+    return (s0 + s1) / 2
 
 
 def _punto_mas_bajo(env, a, b):
@@ -223,22 +294,23 @@ def cortes(wav_bytes, textos):
     x = a_mono16k(wav_bytes)
     dur = len(x) / SR
     env = envolvente_db(x)
-    sil, _ = silencios(env, minimo_s=0.08)
+    sil, umbral = silencios(env, minimo_s=0.08)
     voz_ini = sil[0][1] if sil and sil[0][0] <= 0.02 else 0.0
     voz_fin = sil[-1][0] if sil and sil[-1][1] >= dur - 0.05 else dur
     if len(textos) == 1:
         return [(max(0.0, voz_ini - 0.05), min(dur, voz_fin + 0.15))], "un solo turno"
     rec = _palabras(x)
     turnos, cobertura = _coincidencias(textos, rec)
+    ritmo = _ritmo(turnos, env, umbral)
     n = len(textos)
     fijos = [None] * (n - 1)
+    bordes = 0
     for k in range(n - 1):
         a, b = turnos[k], turnos[k + 1]
         if not (a and b) or b["ini"] < a["fin"] - 0.03:
             continue
-        L, R = a["fin"], b["ini"]
-        dentro = [(s0, s1, d) for s0, s1, d in sil if L - 0.06 <= (s0 + s1) / 2 <= R + 0.06]
-        fijos[k] = (sum(max(dentro, key=lambda z: z[2])[:2]) / 2) if dentro else _punto_mas_bajo(env, L, R)
+        bordes += 1 if (a["resto_fin"] or b["resto_ini"]) else 0
+        fijos[k] = _frontera(env, umbral, sil, a, b, ritmo)
     # las fronteras fijadas tienen que ir en orden
     ultimo = -1.0
     for k in range(n - 1):
@@ -264,7 +336,8 @@ def cortes(wav_bytes, textos):
         if turnos[i] and ((i > 0 and turnos[i]["ini"] < a - 0.15) or (i < n - 1 and turnos[i]["fin"] > b + 0.15)):
             raise ErrorAlineado(f"el turno {i + 1} tiene palabras fuera de su trozo")
     resumen = (f"{n} turnos · transcripción {'sí' if rec else 'no'} ({cobertura:.0%} de palabras) · "
-               f"{sum(1 for f in fijos if f is not None)}/{n - 1} cortes fijados por la transcripción")
+               f"{sum(1 for f in fijos if f is not None)}/{n - 1} cortes fijados por la transcripción · "
+               f"{bordes} con palabras sin reconocer junto al corte · {ritmo:.0f} letras/s")
     return tramos, resumen
 
 

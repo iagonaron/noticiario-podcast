@@ -50,6 +50,28 @@ def _recortar(seg):
     return seg[ini:len(seg) - fin] if len(seg) - fin > ini else seg
 
 
+PAUSA_LARGA_MS = 800       # un silencio así de largo DENTRO de un turno es un hueco, no una pausa natural
+PAUSA_QUEDA_MS = 380       # … y se deja en esto
+
+
+def _acortar_pausas(seg):
+    """Acorta los silencios demasiado largos dentro de un turno (por ejemplo, la pausa entre turnos
+    que se quedó dentro de un trozo), sin tocar las pausas normales de la frase."""
+    if len(seg) < 2 * PAUSA_LARGA_MS or seg.max_dBFS == float("-inf"):
+        return seg
+    from pydub.silence import detect_silence
+    huecos = detect_silence(seg, min_silence_len=PAUSA_LARGA_MS, silence_thresh=seg.max_dBFS - 42, seek_step=10)
+    huecos = [(a, b) for a, b in huecos if a > 40 and b < len(seg) - 40]
+    if not huecos:
+        return seg
+    medio = PAUSA_QUEDA_MS // 2
+    salida, desde = AudioSegment.empty(), 0
+    for a, b in huecos:
+        salida += seg[desde:a + medio]
+        desde = b - medio
+    return salida + seg[desde:]
+
+
 def _nivelar(seg, objetivo=VOZ_DBFS):
     return seg if seg.dBFS == float("-inf") else seg.apply_gain(objetivo - seg.dBFS)
 
@@ -95,7 +117,8 @@ def _envolvente(regiones, total_ms):
 def montar(piezas, musica, ruta_wav):
     """piezas: lista ordenada de {'wav': bytes, 'bloque': str, 'noticia': int}. Devuelve la duración (s)."""
     fondo = musica.get("fondo")
-    voces = [_nivelar(_recortar(_mono(AudioSegment.from_file(io.BytesIO(p["wav"]), format="wav")))) for p in piezas]
+    voces = [_nivelar(_acortar_pausas(_recortar(_mono(AudioSegment.from_file(io.BytesIO(p["wav"]), format="wav")))))
+             for p in piezas]
 
     # 1) dónde va cada trozo de voz
     pos = ENTRADA_MS if fondo else 300

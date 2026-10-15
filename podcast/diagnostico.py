@@ -8,6 +8,7 @@
     python -m podcast.diagnostico guion      → pide un guion de prueba a Gemini con noticias inventadas
     python -m podcast.diagnostico planes     → propuesta del momento Distinto Básico (va a Dropbox /Pruebas)
 """
+import io
 import json
 import re
 import sys
@@ -246,6 +247,108 @@ def muestras():
             nota(f"Muestra {nombre_voz}", f"FALLO {modelo}: {str(e)[:500]}", "warning")
 
 
+def _parecido(a, b):
+    import difflib
+    return difflib.SequenceMatcher(None, a, b).ratio() if a and b else 0.0
+
+
+def _bordes(oido, esperado, previo, siguiente):
+    """Problemas en los bordes de un trozo: «cola» (empieza con el final del turno anterior),
+    «invade» (acaba con el principio del siguiente) o «raro» (no empieza o no acaba como debe)."""
+    o, e = "".join(oido), "".join(esperado)
+    problemas = []
+    if _parecido(o[:10], e[:10]) < 0.6:
+        cola = any(_parecido("".join(oido[:k]), "".join(previo[-k:])) >= 0.8 for k in (1, 2, 3, 4) if previo)
+        problemas.append("cola" if cola else "principio raro")
+    if _parecido(o[-10:], e[-10:]) < 0.6:
+        invade = any(_parecido("".join(oido[-k:]), "".join(siguiente[:k])) >= 0.8 for k in (1, 2, 3, 4) if siguiente)
+        problemas.append("invade" if invade else "final raro")
+    return problemas
+
+
+def _huecos(wav, minimo=0.8):
+    """Silencios de más de «minimo» segundos dentro de un trozo (sin contar los bordes)."""
+    from . import alinear
+    x = alinear.a_mono16k(wav)
+    env = alinear.envolvente_db(x)
+    sil, _ = alinear.silencios(env, minimo_s=minimo)
+    dur = len(x) / alinear.SR
+    return [d for s0, s1, d in sil if s0 > 0.05 and s1 < dur - 0.05]
+
+
+def recortar():
+    """Vuelve a cortar los lotes de voz guardados en Dropbox (/Pruebas/Crudo …) con el método actual,
+    y compara cada trozo —transcrito por separado— con los cortes que se hicieron en su día.
+    No gasta cupo de Gemini. El detalle (con texto) va a Dropbox; aquí solo cifras."""
+    import json
+    import os
+    import subprocess
+    from pydub import AudioSegment
+    from . import alinear, dropbox
+    carpeta = os.environ.get("CRUDO") or "/Pruebas/Crudo de la prueba"
+    token = dropbox.token_acceso()
+    meta = json.loads(dropbox.descargar(token, f"{carpeta}/lotes.json").decode("utf-8"))
+    m = alinear._modelo()
+    informe = [f"Recorte de {carpeta} (generado {meta.get('generado')}) · transcripción {config_whisper()}"]
+    cuentas = {"antes": {}, "ahora": {}}
+    trozos_ahora = {}
+    for lote in meta["lotes"]:
+        if lote.get("leyo_etiqueta"):
+            informe.append(f"\n{lote['fichero']}: leyó la etiqueta de pausa, se salta")
+            continue
+        mp3 = dropbox.descargar(token, f"{carpeta}/{lote['fichero']}")
+        wav = subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-i", "pipe:0", "-ac", "1", "-ar", "24000",
+                              "-c:a", "pcm_s16le", "-f", "wav", "pipe:1"], input=mp3, capture_output=True, check=True).stdout
+        textos = lote["textos"]
+        try:
+            nuevos, resumen = alinear.cortes(wav, textos)
+        except Exception as e:
+            nuevos, resumen = None, f"ERROR {type(e).__name__}: {e}"
+        informe.append(f"\n{lote['fichero']} · voz {lote['voz']} · {lote['modelo']} · pausas {lote['pausas']} · "
+                       f"{len(textos)} turnos\n  antes: {lote.get('resumen')}\n  ahora: {resumen}")
+        for cuando, tramos in (("antes", lote["tramos"]), ("ahora", nuevos)):
+            if not tramos:
+                continue
+            for i, (a, b) in enumerate(tramos):
+                trozo = alinear.recortar(wav, a, b)
+                segs, _ = m.transcribe(alinear.a_mono16k(trozo), language="es", beam_size=1, vad_filter=False,
+                                       condition_on_previous_text=False) if m else ([], None)
+                oido = alinear.norma(" ".join(s.text for s in segs))
+                esperado = alinear.norma(textos[i])
+                previo = alinear.norma(textos[i - 1]) if i > 0 else []
+                siguiente = alinear.norma(textos[i + 1]) if i + 1 < len(textos) else []
+                problemas = _bordes(oido, esperado, previo, siguiente)
+                largos = _huecos(trozo)
+                if largos:
+                    problemas.append(f"hueco {max(largos):.1f}s")
+                for p in problemas:
+                    clave = p.split()[0] if not p.startswith("principio") and not p.startswith("final") else p
+                    cuentas[cuando][clave] = cuentas[cuando].get(clave, 0) + 1
+                if problemas:
+                    informe.append(f"  {cuando} · turno {lote['indices'][i] + 1}: {', '.join(problemas)} · "
+                                   f"oído «{' '.join(oido[:5])} … {' '.join(oido[-5:])}» · "
+                                   f"esperado «{' '.join(esperado[:5])} … {' '.join(esperado[-5:])}»")
+                if cuando == "ahora":
+                    trozos_ahora[lote["indices"][i]] = trozo
+    # el diálogo recortado, intercalado como en el episodio (sin música), para escucharlo
+    if trozos_ahora:
+        dialogo = AudioSegment.silent(300, frame_rate=24000)
+        for i in sorted(trozos_ahora):
+            dialogo += AudioSegment.from_file(io.BytesIO(trozos_ahora[i]), format="wav") + AudioSegment.silent(300, frame_rate=24000)
+        b = io.BytesIO()
+        dialogo.export(b, format="mp3", bitrate="96k")
+        dropbox.subir(token, "/Pruebas/Recorte - diálogo.mp3", b.getvalue())
+    resumen = " · ".join(f"{c}: " + (", ".join(f"{k} {v}" for k, v in sorted(cuentas[c].items())) or "nada") for c in cuentas)
+    informe.insert(1, f"Problemas por tipo → {resumen}")
+    dropbox.subir(token, "/Pruebas/Recorte - informe.txt", "\n".join(informe).encode("utf-8-sig"))
+    nota("Recorte", f"{carpeta} · {resumen}")
+
+
+def config_whisper():
+    from . import config
+    return config.WHISPER_MODELO
+
+
 def guion():
     from . import guion as g, util
     falsas = {"portada": [{"titulo": f"Noticia de prueba {i}", "fuente": "Prueba", "categoria": "",
@@ -263,6 +366,6 @@ if __name__ == "__main__":
         try:
             {"elpais": elpais, "noticias": noticias, "voz": voz, "guion": guion, "edge": edge,
              "piper": piper, "vozlarga": vozlarga, "planes": planes, "busqueda": busqueda, "cortes": cortes,
-             "muestras": muestras}[prueba]()
+             "muestras": muestras, "recortar": recortar}[prueba]()
         except Exception as e:
             nota(f"Diagnóstico {prueba}", traceback.format_exc()[-1500:], "warning")
