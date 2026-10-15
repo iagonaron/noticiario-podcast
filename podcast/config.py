@@ -107,6 +107,8 @@ DROPBOX_PLANES_HISTORIAL = "/Distinto Básico - propuestas.txt"  # lo ya propues
 DROPBOX_CUMPLES = "/Cumpleaños.txt"   # la lista de cumpleaños vive SOLO aquí (el repositorio es público)
 DROPBOX_MUSICA = "/musica"   # intro / transicion / cierre (.mp3 o .wav); si no hay, va sin música
 DROPBOX_DIAGNOSTICO = _PREFIJO + "/Diagnóstico.txt"   # datos técnicos de la última ejecución
+# lotes de voz tal cual salen de Gemini, con sus textos y cortes (se sobrescriben en cada ejecución)
+DROPBOX_CRUDO = "/Pruebas/Crudo de la prueba" if PRUEBA else "/Pruebas/Crudo del episodio"
 
 # ---------------------------------------------------------------- montaje
 MP3_KBPS = "96k"

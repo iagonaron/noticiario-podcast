@@ -95,6 +95,24 @@ def apuntar_plan(token, hoy, plan, historial):
     dropbox.subir(token, config.DROPBOX_PLANES_HISTORIAL, texto.encode("utf-8-sig"))
 
 
+def subir_crudos(token, segs):
+    """Cada lote de voz tal cual salió de Gemini, con sus textos y cortes, a la carpeta privada de
+    Dropbox: así los cortes se pueden revisar y mejorar después sin volver a gastar cupo."""
+    import subprocess
+    lista = []
+    for k, c in enumerate(voces.CRUDOS, 1):
+        fichero = f"lote {k}.mp3"
+        mp3 = subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-i", "pipe:0", "-c:a", "libmp3lame",
+                              "-b:a", "96k", "-f", "mp3", "pipe:1"], input=c["wav"], capture_output=True, check=True).stdout
+        dropbox.subir(token, f"{config.DROPBOX_CRUDO}/{fichero}", mp3)
+        lista.append(dict({k2: v for k2, v in c.items() if k2 != "wav"}, fichero=fichero))
+    meta = {"generado": util.ahora().isoformat(), "lotes": lista,
+            "turnos": [{"voz": s["voz"], "bloque": s["bloque"], "noticia": s.get("noticia"), "texto": s["texto"]}
+                       for s in segs]}
+    dropbox.subir(token, f"{config.DROPBOX_CRUDO}/lotes.json",
+                  json.dumps(meta, ensure_ascii=False, indent=1).encode("utf-8"))
+
+
 def main():
     t0 = time.time()
     ahora = util.ahora()
@@ -200,6 +218,11 @@ def main():
         finally:
             diag += ["Registro de voz:"] + [f"  {l}" for l in voces.REGISTRO]
         avisos += av
+        if token and voces.CRUDOS:
+            try:
+                subir_crudos(token, segs)
+            except Exception as e:
+                avisos.append(f"Crudo de las voces: no se pudo guardar ({type(e).__name__}: {str(e)[:120]})")
         util.log(f"Voces: {motor} · {len(piezas)} piezas")
         diag.append(f"Voces: {motor} · {len(piezas)} piezas")
         for clave in sorted({p["voz"] for p in piezas}):

@@ -492,6 +492,8 @@ def sintetizar_tandas(segmentos, carpeta):
 # turnos enteros. Después se cortan turno a turno (alinear.py) y el montaje intercala el diálogo.
 AGOTADOS = set()
 SIN_PAUSAS = set()          # modelos que leen en voz alta la etiqueta <long pause>
+CRUDOS = []                 # cada lote tal cual sale de Gemini (con sus textos y cortes), para revisar
+                            # y mejorar los cortes más tarde sin volver a gastar cupo
 
 
 def nombre(clave):
@@ -529,7 +531,11 @@ def _voz_con_modelo(via, modelo, clave, lotes):
                 piezas[lote[0][0]] = wav
                 continue
             tramos, resumen = alinear.cortes(wav, [t for _, t in lote])
-            if tanda["pausas"] and alinear.se_oye("long pause"):
+            leida = bool(tanda["pausas"] and alinear.se_oye("long pause"))
+            CRUDOS.append({"voz": clave, "modelo": modelo, "via": via, "pausas": bool(tanda["pausas"]),
+                           "leyo_etiqueta": leida, "indices": [i for i, _ in lote], "textos": [t for _, t in lote],
+                           "tramos": [[float(a), float(b)] for a, b in tramos], "resumen": resumen, "wav": wav})
+            if leida:
                 # si la etiqueta se llega a leer en voz alta, se repite este lote sin ella
                 SIN_PAUSAS.add(modelo)
                 anota(f"    ⚠ {modelo} leyó la etiqueta de pausa: repito el lote sin ella")
