@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
     inputs:
       modo:
-        description: "listar, analizar, describir o fondo"
+        description: "listar, analizar, describir, muestras o fondo"
         required: false
         default: "listar"
         type: string
@@ -39,6 +39,6 @@ jobs:
         with:
           python-version: "3.12"
       - run: |
-          pip install numpy
+          pip install numpy pydub
           command -v ffmpeg || (sudo apt-get update -y && sudo apt-get install -y ffmpeg)
       - run: python -m podcast.musica_libre "${MODO:-listar}" $ENLACES

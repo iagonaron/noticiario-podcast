@@ -130,9 +130,12 @@ def describir(urls):
     import json
     clave = os.environ.get("GEMINI_API_KEY", "")
     modelos = (os.environ.get("MODELOS_OIDO") or "gemini-3.6-flash,gemini-3-flash-preview,gemini-3.8-flash").split(",")
-    pregunta = ("Escucha esta pista musical. Responde en español y en una sola línea: género, instrumentos, ambiente, "
-                "tempo aproximado y si serviría como música de fondo continua bajo las voces de un informativo "
-                "de radio o telediario moderno (nota del 1 al 10, y por qué). Empieza por la nota, así: «8/10 · …».")
+    pregunta = ("Escucha esta pista musical entera. Responde en español y en una sola línea: género, TODOS los "
+                "instrumentos que se oyen (di expresamente si hay vientos metales —trompeta, trompa, trombón, sección "
+                "de metales sintética— y si hay guitarra), si la batería o la percusión llevan un ritmo marcado, "
+                "ambiente y tempo aproximado. Y si serviría como música de fondo continua bajo las voces de un "
+                "informativo de radio moderno, con batería y ritmo pero sin vientos metales (nota del 1 al 10, y por "
+                "qué). Empieza por la nota, así: «8/10 · …».")
     filas = []
     for url in urls:
         audio = bajar(url)
@@ -154,6 +157,58 @@ def describir(urls):
                 texto = f"error con {m}: {e}"
         filas.append(f"{url.split('/')[-1]} → {texto[:400]}")
     nota("Pistas escuchadas por Gemini", "\n".join(filas))
+
+
+def _voz_de_muestra(token):
+    """Unos turnos de los titulares del último episodio (del crudo guardado en Dropbox), como piezas
+    para el montaje: así cada muestra suena como sonaría el programa."""
+    import json
+    from . import alinear, dropbox
+    carpeta = "/Pruebas/Crudo del episodio"
+    meta = json.loads(dropbox.descargar(token, f"{carpeta}/lotes.json").decode("utf-8"))
+    turnos = meta["turnos"]
+    elegidos = [i for i, t in enumerate(turnos) if t["bloque"] == "titulares" and t.get("noticia") in (1, 2)][:9]
+    piezas = {}
+    for lote in meta["lotes"]:
+        if lote.get("leyo_etiqueta") or not set(lote["indices"]) & set(elegidos):
+            continue
+        mp3 = dropbox.descargar(token, f"{carpeta}/{lote['fichero']}")
+        wav = subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-i", "pipe:0", "-ac", "1", "-ar", "24000",
+                              "-c:a", "pcm_s16le", "-f", "wav", "pipe:1"], input=mp3, capture_output=True, check=True).stdout
+        for idx, (a, b) in zip(lote["indices"], lote["tramos"]):
+            if idx in elegidos:
+                piezas[idx] = alinear.recortar(wav, a, b)
+    return [{"wav": piezas[i], "bloque": turnos[i]["bloque"], "noticia": turnos[i].get("noticia"),
+             "voz": turnos[i]["voz"]} for i in elegidos if i in piezas]
+
+
+def muestras(urls):
+    """Para cada pista candidata, un trozo de programa de verdad (los primeros titulares del último
+    episodio con esa música de fondo) en Dropbox /Pruebas/Músicas para elegir/, para elegir de oído."""
+    from pydub import AudioSegment
+    from . import dropbox, montaje
+    token = dropbox.token_acceso()
+    piezas = _voz_de_muestra(token)
+    filas = []
+    with tempfile.TemporaryDirectory() as tmp:
+        for k, url in enumerate(urls, 1):
+            try:
+                orig = os.path.join(tmp, f"p{k}.mp3")
+                with open(orig, "wb") as f:
+                    f.write(bajar(url))
+                t0 = _inicio_sonoro(orig)
+                limpia = os.path.join(tmp, f"l{k}.mp3")
+                _ffmpeg("-ss", f"{t0:.2f}", "-i", orig, "-ac", "2", "-b:a", "192k", limpia)
+                musica = montaje.cargar_musica({"fondo": open(limpia, "rb").read()})
+                wav, mp3 = os.path.join(tmp, f"m{k}.wav"), os.path.join(tmp, f"m{k}.mp3")
+                dur = montaje.montar(piezas, musica, wav)
+                montaje.a_mp3(wav, mp3, {"title": f"Muestra {k}"})
+                nombre = re.sub(r"[^\w\- ]", "", url.rstrip("/").split("/")[-1].replace(".mp3", ""))
+                dropbox.subir(token, f"/Pruebas/Músicas para elegir/{k} pista {nombre}.mp3", open(mp3, "rb").read())
+                filas.append(f"{k} · {url} · {dur:.0f}s")
+            except Exception as e:
+                filas.append(f"{k} · {url} · error {e}")
+    nota("Muestras de música", "\n".join(filas))
 
 
 def fondo(url):
@@ -203,6 +258,8 @@ if __name__ == "__main__":
         describir(resto)
     elif modo == "fondo":
         fondo(resto[0])
+    elif modo == "muestras":
+        muestras(resto)
     elif modo == "preparar":
         preparar(resto[0])
     else:
