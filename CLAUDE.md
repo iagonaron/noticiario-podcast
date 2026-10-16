@@ -25,6 +25,12 @@
   seguidas se alejan, `voces._corregir_derivas` las rehace (1 petición, máx. 2 tramos por voz). El
   diagnóstico `timbre` aplica la misma regla al crudo guardado. Umbrales aún sin calibrar con un caso
   real localizado (el 16-oct Iago oyó un cambio de voz de Lucía que la huella no destacó).
+- Local (16-oct-2026, tras perderse un terremoto que se notó en media Galicia): además de las locales del
+  noticiario (sobre todo de Coruña), `noticias.galicia()` agrupa lo que cuentan los medios de Galicia en
+  24 h (Google Noticias «Galicia when:1d» + sección Galicia de La Voz) y lo ordena por cuántos medios lo
+  cuentan. El guionista elige 3 locales por importancia; si algo de Galicia lo cuentan 6 medios o más,
+  va siempre y la primera (cuarta noticia). Candidatas de cada día: /Pruebas/Noticias candidatas.json.
+  Diagnósticos: `galicia`, `fuentes_galicia`, `estado` (qué guarda el noticiario por dentro).
 - Música: el flujo «Preparar música» (modos listar, describir, muestras, fondo) prepara candidatas;
   `muestras` monta un trozo de programa real con cada una en Dropbox /Pruebas/Músicas para elegir/.
   Antes de `fondo`, guarda una copia de /musica/fondo.mp3 (se sobrescribe).
