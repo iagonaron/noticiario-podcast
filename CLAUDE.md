@@ -15,6 +15,16 @@
   prueba»), con sus textos y cortes. Si Iago oye un corte mal hecho, el flujo «Diagnóstico» con
   `pruebas` = `recortar` (y `crudo` = esa carpeta) vuelve a cortar esos lotes sin gastar cupo y deja el
   detalle en /Pruebas/Recorte - informe.txt; `cortes_viejos` = `si` compara con la regla anterior.
+- Bordes de cada frase (16-oct-2026): lo que suena antes de la primera palabra o después de la
+  última sin ser del guion (sílaba suelta, respiración, etiqueta a medio leer), corto y separado por
+  un silencio, se quita (`alinear._limpiar`). El resumen de cada lote dice cuántos «bordes limpiados».
+- Deriva de voz: `huella.py` compara el timbre de cada frase con el resto de la misma voz; si varias
+  seguidas se alejan, `voces._corregir_derivas` las rehace (1 petición, máx. 2 tramos por voz). El
+  diagnóstico `timbre` aplica la misma regla al crudo guardado. Umbrales aún sin calibrar con un caso
+  real localizado (el 16-oct Iago oyó un cambio de voz de Lucía que la huella no destacó).
+- Música: el flujo «Preparar música» (modos listar, describir, muestras, fondo) prepara candidatas;
+  `muestras` monta un trozo de programa real con cada una en Dropbox /Pruebas/Músicas para elegir/.
+  Antes de `fondo`, guarda una copia de /musica/fondo.mp3 (se sobrescribe).
 - Desde esta sesión GraphQL no funciona: usa `gh api` (REST). Los registros de las ejecuciones no se
   pueden descargar; lo útil está en las anotaciones del trabajo
   (`gh api repos/iagonaron/noticiario-podcast/check-runs/<job_id>/annotations`) y en
