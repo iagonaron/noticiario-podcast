@@ -10,6 +10,9 @@
     hace falta oír la voz de Gemini, con `modelos_voz` = `piper:local`.
   - Como mucho una prueba al día con el modelo de voz principal, y solo si hace falta de verdad.
   - Los modos del flujo «Diagnóstico» que generan voz (voz, vozlarga, cortes) también gastan cupo.
+  - El texto también tiene cupo: «Preparar música» → `describir` y las pruebas completas usan
+    gemini-3.6-flash (reserva del guion). El 16-oct quedó agotado tras describir 20 pistas: mejor
+    pocas pistas, o antes de las 9:00.
 - Voces: Lucía = Kore, Martín = Algieba (la eligió Iago el 15-oct-2026 entre voces graves; antes Puck).
 - Cortes: cada lote de voz se guarda tal cual en Dropbox (/Pruebas/Crudo del episodio, o «Crudo de la
   prueba»), con sus textos y cortes. Si Iago oye un corte mal hecho, el flujo «Diagnóstico» con
