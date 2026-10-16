@@ -39,6 +39,6 @@ jobs:
         with:
           python-version: "3.12"
       - run: |
-          pip install numpy pydub
+          pip install numpy pydub requests
           command -v ffmpeg || (sudo apt-get update -y && sudo apt-get install -y ffmpeg)
       - run: python -m podcast.musica_libre "${MODO:-listar}" $ENLACES
