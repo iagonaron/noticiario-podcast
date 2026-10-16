@@ -365,6 +365,95 @@ def recortar():
     nota("Recorte", f"{carpeta} · {resumen}")
 
 
+def _huella(x, sr=16000):
+    """Rasgos de un trozo de voz: tono medio (Hz), variación del tono (semitonos), brillo (Hz) y
+    espectro medio en bandas mel (para comparar timbres)."""
+    import numpy as np
+    win, hop = 640, 160
+    n = (len(x) - win) // hop
+    if n < 5:
+        return None
+    marcos = np.lib.stride_tricks.as_strided(x, shape=(n, win), strides=(x.strides[0] * hop, x.strides[0]))
+    marcos = marcos * np.hanning(win)
+    energia = 10 * np.log10((marcos ** 2).mean(axis=1) + 1e-10)
+    voz = energia > (np.percentile(energia, 95) - 25)
+    m = marcos[voz]
+    if len(m) < 5:
+        return None
+    # tono por autocorrelación (70-400 Hz)
+    F = np.fft.rfft(m, 2 * win, axis=1)
+    ac = np.fft.irfft(np.abs(F) ** 2, axis=1)[:, :win]
+    ac = ac / (ac[:, :1] + 1e-12)
+    lo, hi = int(sr / 400), int(sr / 70)
+    lag = lo + np.argmax(ac[:, lo:hi], axis=1)
+    pico = ac[np.arange(len(m)), lag]
+    f0 = sr / lag[pico > 0.45]
+    espec = np.abs(np.fft.rfft(m, axis=1)) ** 2
+    freqs = np.fft.rfftfreq(win, 1 / sr)
+    brillo = float((espec * freqs).sum() / (espec.sum() + 1e-12))
+    # 24 bandas mel entre 80 y 7600 Hz
+    mel = lambda f: 2595 * np.log10(1 + f / 700)
+    imel = lambda z: 700 * (10 ** (z / 2595) - 1)
+    bordes = imel(np.linspace(mel(80), mel(7600), 26))
+    bandas = np.array([espec[:, (freqs >= bordes[i]) & (freqs < bordes[i + 2])].sum(axis=1).mean()
+                       for i in range(24)])
+    return {"tono": float(np.median(f0)) if len(f0) > 5 else None,
+            "var": float(np.std(12 * np.log2(f0 / np.median(f0)))) if len(f0) > 5 else None,
+            "brillo": brillo, "mel": 10 * np.log10(bandas + 1e-12), "voz_s": len(m) * hop / sr}
+
+
+def timbre():
+    """¿Cambia una voz de un lote a otro o dentro de un lote? Huella de cada trozo (tono, variación,
+    brillo, timbre y ritmo) en el crudo guardado en Dropbox. Sin gastar cupo. Detalle en Dropbox."""
+    import json
+    import os
+    import subprocess
+    import numpy as np
+    from . import alinear, dropbox
+    carpeta = os.environ.get("CRUDO") or "/Pruebas/Crudo del episodio"
+    token = dropbox.token_acceso()
+    meta = json.loads(dropbox.descargar(token, f"{carpeta}/lotes.json").decode("utf-8"))
+    filas, lotes = [], []
+    for lote in meta["lotes"]:
+        if lote.get("leyo_etiqueta"):
+            continue
+        mp3 = dropbox.descargar(token, f"{carpeta}/{lote['fichero']}")
+        wav = subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-i", "pipe:0", "-ac", "1", "-ar", "24000",
+                              "-c:a", "pcm_s16le", "-f", "wav", "pipe:1"], input=mp3, capture_output=True, check=True).stdout
+        x = alinear.a_mono16k(wav)
+        trozos = []
+        for i, (a, b) in enumerate(lote["tramos"]):
+            h = _huella(x[int(a * 16000):int(b * 16000)])
+            if h:
+                h["ritmo"] = len(lote["textos"][i]) / max(h["voz_s"], 0.3)
+                h["turno"] = lote["indices"][i] + 1
+                trozos.append(h)
+        lotes.append({"fichero": lote["fichero"], "voz": lote["voz"], "trozos": trozos})
+    resumen = []
+    for voz in sorted({l["voz"] for l in lotes}):
+        mios = [l for l in lotes if l["voz"] == voz]
+        todos = [t for l in mios for t in l["trozos"]]
+        mel_media = np.mean([t["mel"] for t in todos], axis=0)
+        for l in mios:
+            ts = l["trozos"]
+            tono = np.median([t["tono"] for t in ts if t["tono"]])
+            var = np.median([t["var"] for t in ts if t["var"] is not None])
+            brillo = np.median([t["brillo"] for t in ts])
+            ritmo = np.median([t["ritmo"] for t in ts])
+            dist = np.median([np.sqrt(np.mean((t["mel"] - mel_media) ** 2)) for t in ts])
+            linea = (f"voz {voz} · {l['fichero']} · {len(ts)} trozos · tono {tono:.0f} Hz · variación {var:.1f} st · "
+                     f"brillo {brillo:.0f} Hz · ritmo {ritmo:.1f} letras/s · distancia de timbre {dist:.1f} dB")
+            resumen.append(linea)
+            filas.append("\n" + linea)
+            for t in ts:
+                filas.append(f"  turno {t['turno']}: tono {t['tono'] or 0:.0f} · var {t['var'] or 0:.1f} · "
+                             f"brillo {t['brillo']:.0f} · ritmo {t['ritmo']:.1f} · "
+                             f"timbre {np.sqrt(np.mean((t['mel'] - mel_media) ** 2)):.1f}")
+    dropbox.subir(token, "/Pruebas/Timbre - informe.txt",
+                  ("\n".join([f"Huella de las voces en {carpeta}"] + resumen + filas)).encode("utf-8-sig"))
+    nota("Timbre", "\n".join(resumen))
+
+
 def config_whisper():
     from . import config
     return config.WHISPER_MODELO
@@ -387,6 +476,6 @@ if __name__ == "__main__":
         try:
             {"elpais": elpais, "noticias": noticias, "voz": voz, "guion": guion, "edge": edge,
              "piper": piper, "vozlarga": vozlarga, "planes": planes, "busqueda": busqueda, "cortes": cortes,
-             "muestras": muestras, "recortar": recortar}[prueba]()
+             "muestras": muestras, "recortar": recortar, "timbre": timbre}[prueba]()
         except Exception as e:
             nota(f"Diagnóstico {prueba}", traceback.format_exc()[-1500:], "warning")
