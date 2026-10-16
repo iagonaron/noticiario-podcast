@@ -223,6 +223,20 @@ def _llamada(via, modelo, tanda):
     return (_gemini_interactions if via == "interactions" else _gemini_generate)(modelo, tanda)
 
 
+def _piper_wav(voz, sid, texto, SynthesisConfig):
+    """Un turno con Piper en WAV. El formato se fija antes: si una frase no da sonido (solo signos,
+    por ejemplo), sale un silencio corto en vez del error «# channels not specified»."""
+    b = io.BytesIO()
+    with wave.open(b, "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(int(getattr(voz.config, "sample_rate", 22050)))
+        voz.synthesize_wav(texto, w, syn_config=SynthesisConfig(speaker_id=sid, length_scale=config.PIPER_LENTITUD))
+        if w.getnframes() == 0:
+            w.writeframes(b"\x00\x00" * int(w.getframerate() * 0.3))
+    return b.getvalue()
+
+
 def _piper_tanda(tanda):
     """Una tanda de una sola voz con Piper, con pausas entre turnos como las de una lectura seguida."""
     import random
@@ -232,10 +246,8 @@ def _piper_tanda(tanda):
     voz, sid = voces[tanda["turnos"][0]["voz"]]
     total = AudioSegment.silent(duration=300, frame_rate=24000)
     for t in tanda["turnos"]:
-        b = io.BytesIO()
-        with wave.open(b, "wb") as w:
-            voz.synthesize_wav(t["texto"], w, syn_config=SynthesisConfig(speaker_id=sid, length_scale=config.PIPER_LENTITUD))
-        seg = AudioSegment.from_wav(io.BytesIO(b.getvalue())).set_channels(1).set_frame_rate(24000).set_sample_width(2)
+        seg = AudioSegment.from_wav(io.BytesIO(_piper_wav(voz, sid, t["texto"], SynthesisConfig))).set_channels(1)
+        seg = seg.set_frame_rate(24000).set_sample_width(2)
         total += seg + AudioSegment.silent(duration=random.randint(300, 750), frame_rate=24000)
     out = io.BytesIO()
     total.export(out, format="wav")
@@ -433,10 +445,7 @@ def sintetizar_piper(lista):
         trozos = []
         for t in tanda["turnos"]:
             voz, sid = voces[t["voz"]]
-            b = io.BytesIO()
-            with wave.open(b, "wb") as w:
-                voz.synthesize_wav(t["texto"], w, syn_config=SynthesisConfig(speaker_id=sid, length_scale=config.PIPER_LENTITUD))
-            trozos.append(AudioSegment.from_wav(io.BytesIO(b.getvalue())))
+            trozos.append(AudioSegment.from_wav(io.BytesIO(_piper_wav(voz, sid, t["texto"], SynthesisConfig))))
         audios.append(_juntar(trozos))
     return audios
 
