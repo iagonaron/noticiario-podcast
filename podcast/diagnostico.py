@@ -443,6 +443,58 @@ def estado():
                                   f"{ {k: len(v) for k, v in d.get('secciones', {}).items()} } · tarjetas: {len(d.get('tarjetas', {}))}")
 
 
+FUENTES_GALICIA = [
+    "https://news.google.com/rss/headlines/section/geo/Galicia?hl=es&gl=ES&ceid=ES:es",
+    "https://news.google.com/rss/search?q=Galicia+when:1d&hl=es&gl=ES&ceid=ES:es",
+    "https://www.lavozdegalicia.es/rss/",
+    "https://www.lavozdegalicia.es/rss/galicia.xml",
+    "https://www.lavozdegalicia.es/index.xml",
+    "https://www.galiciapress.es/rss",
+    "https://www.europapress.es/rss/rss.aspx?ch=00283",
+    "https://www.farodevigo.es/rss",
+    "https://www.laopinioncoruna.es/rss",
+    "https://www.elcorreogallego.es/rss",
+    "https://www.crtvg.es/rss/rss-novas.xml",
+]
+
+
+def fuentes_galicia():
+    """¿Qué fuentes de noticias de toda Galicia se pueden leer desde aquí (RSS)? Para cada una:
+    si responde, cuántas noticias trae y si hablan del terremoto del 15-oct-2026. Detalle en Dropbox."""
+    import os
+    import urllib.request
+    import xml.etree.ElementTree as ET
+    from . import dropbox
+    urls = (os.environ.get("FUENTES") or "").split() or FUENTES_GALICIA
+    resumen, detalle = [], []
+    for url in urls:
+        req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept-Language": "es-ES,es;q=0.9"})
+        try:
+            with urllib.request.urlopen(req, timeout=25) as r:
+                cuerpo = r.read()
+                estado = r.status
+        except Exception as e:
+            resumen.append(f"{url} → {str(e)[:60]}")
+            continue
+        texto = cuerpo.decode("utf-8", "replace")
+        titulos = []
+        try:
+            raiz = ET.fromstring(cuerpo)
+            for it in raiz.iter():
+                if it.tag.split("}")[-1] in ("item", "entry"):
+                    t = next((c.text for c in it if c.tag.split("}")[-1] == "title"), "") or ""
+                    titulos.append(t.strip())
+        except ET.ParseError:
+            enlaces = sorted(set(re.findall(r'href="([^"]+\.xml[^"]*)"', texto)))[:40]
+            detalle.append(f"\n{url} (no es RSS; enlaces .xml que trae): " + " | ".join(enlaces))
+        sismo = [t for t in titulos if re.search(r"terremoto|se[ií]smo|sismo|tembl", t, re.I)]
+        resumen.append(f"{url} → HTTP {estado} · {len(titulos)} noticias · terremoto: {len(sismo)}")
+        detalle.append(f"\n{url}\n" + "\n".join(f"  - {t}" for t in titulos[:15]))
+    dropbox.subir(dropbox.token_acceso(), "/Pruebas/Fuentes de Galicia.txt",
+                  ("\n".join(resumen + detalle)).encode("utf-8-sig"))
+    nota("Fuentes de Galicia", "\n".join(resumen))
+
+
 def config_whisper():
     from . import config
     return config.WHISPER_MODELO
@@ -465,6 +517,7 @@ if __name__ == "__main__":
         try:
             {"elpais": elpais, "noticias": noticias, "voz": voz, "guion": guion, "edge": edge,
              "piper": piper, "vozlarga": vozlarga, "planes": planes, "busqueda": busqueda, "cortes": cortes,
-             "muestras": muestras, "recortar": recortar, "timbre": timbre, "estado": estado}[prueba]()
+             "muestras": muestras, "recortar": recortar, "timbre": timbre, "estado": estado,
+             "fuentes_galicia": fuentes_galicia}[prueba]()
         except Exception as e:
             nota(f"Diagnóstico {prueba}", traceback.format_exc()[-1500:], "warning")
