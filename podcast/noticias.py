@@ -180,6 +180,110 @@ def _elpais_antes(ctx):
     return None, " · ".join(intentos)
 
 
+# ---------------------------------------------------------------- lo gordo de toda Galicia
+# El noticiario elige sus noticias locales sobre todo de Coruña. Para que no se escape lo importante
+# de toda Galicia (el 15-oct-2026 un terremoto que se notó en media Galicia no salió), se mira
+# también la sección Galicia de La Voz y se ordena cada noticia por cuántos medios la están
+# contando en las últimas 24 horas (Google Noticias).
+GALICIA_RSS = "https://www.lavozdegalicia.es/galicia/index.xml"
+GOOGLE_GALICIA = "https://news.google.com/rss/search?q=Galicia+when:1d&hl=es&gl=ES&ceid=ES:es"
+RE_DEPORTE = re.compile(r"\b(celta|deportivo|depor|liga|gol(es)?|partido|obradoiro|breog[aá]n|f[uú]tbol|"
+                        r"baloncesto|balonmano|riazor|bala[ií]dos|entrenador|fichaje)\b", re.I)
+SINONIMOS = {"seismo": "terremoto", "sismo": "terremoto", "temblor": "terremoto", "terremotos": "terremoto",
+             "lume": "incendio", "fuego": "incendio", "incendios": "incendio", "borrasca": "temporal",
+             "dana": "temporal", "ciclogenesis": "temporal", "fallecido": "muerto", "fallece": "muerto",
+             "muere": "muerto", "mueren": "muerto", "muertos": "muerto"}
+VACIAS = {"galicia", "gallego", "gallega", "gallegos", "gallegas", "para", "desde", "hasta", "sobre", "entre",
+          "como", "este", "esta", "estos", "estas", "tras", "contra", "durante", "segun", "pero", "porque",
+          "todo", "toda", "todos", "todas", "cada", "donde", "cuando", "anos", "nuevo", "nueva", "hace", "sera",
+          "puede", "tiene", "tienen", "deja", "dejan", "afecta", "sentir", "noche", "ayer", "hoy"}
+
+
+def _rss(url, timeout=25):
+    """Noticias de un RSS: [{'titulo', 'descripcion', 'fecha', 'enlace'}] (fecha con zona o None)."""
+    import email.utils
+    import html as htmlmod
+    import urllib.request
+    import xml.etree.ElementTree as ET
+    req = urllib.request.Request(url, headers={"User-Agent": util.UA, "Accept-Language": "es-ES,es;q=0.9"})
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        raiz = ET.fromstring(r.read())
+    salida = []
+    for it in raiz.iter("item"):
+        campo = {c.tag.split("}")[-1]: (c.text or "") for c in it}
+        try:
+            fecha = email.utils.parsedate_to_datetime(campo.get("pubDate", ""))
+        except (TypeError, ValueError):
+            fecha = None
+        desc = re.sub(r"<[^>]+>", " ", htmlmod.unescape(campo.get("description", "")))
+        salida.append({"titulo": htmlmod.unescape(campo.get("title", "")).strip(),
+                       "descripcion": re.sub(r"\s+", " ", desc).strip(), "fecha": fecha,
+                       "enlace": campo.get("link", "")})
+    return salida
+
+
+def _claves(titulo):
+    t = util.sin_tildes(titulo or "").lower()
+    toks = re.findall(r"[a-zñ]{4,}|\d+", t)
+    return {SINONIMOS.get(w, w) for w in toks if w not in VACIAS}
+
+
+def _parecidas(a, b):
+    comunes = a & b
+    if comunes & {"terremoto", "temporal"}:          # en un día, en Galicia, suele ser el mismo
+        return True
+    return len(comunes) >= 2 and len(comunes) / max(1, min(len(a), len(b))) >= 0.4
+
+
+def galicia(maximo=3, minimo_medios=3, horas=24):
+    """Lo que más medios están contando de Galicia en las últimas horas, con el texto de La Voz si lo
+    hay. Cada noticia lleva «medios» (cuántos medios distintos la cuentan). Sin IA y sin cupo."""
+    ahora = dt.datetime.now(dt.timezone.utc)
+    reciente = lambda n: not n["fecha"] or (ahora - n["fecha"]).total_seconds() < horas * 3600  # noqa: E731
+    google = [n for n in _rss(GOOGLE_GALICIA) if reciente(n)]
+    try:
+        voz = [n for n in _rss(GALICIA_RSS) if reciente(n)]
+    except Exception:
+        voz = []
+    grupos = []                     # [{'claves', 'titulos': [(titulo, medio)], 'voz': noticia o None}]
+    for n in google:
+        titulo, _, medio = n["titulo"].rpartition(" - ")
+        titulo, medio = (titulo or n["titulo"]).strip(), (medio or "?").strip()
+        if RE_DEPORTE.search(titulo):
+            continue
+        c = _claves(titulo)
+        g = next((g for g in grupos if _parecidas(c, g["claves"])), None)
+        if g is None:
+            grupos.append({"claves": set(c), "titulos": [(titulo, medio)], "voz": None})
+        else:
+            g["titulos"].append((titulo, medio))
+            g["claves"] |= c
+    for v in voz:
+        if RE_DEPORTE.search(v["titulo"]):
+            continue
+        c = _claves(v["titulo"])
+        g = next((g for g in grupos if _parecidas(c, g["claves"])), None)
+        if g is None:
+            grupos.append({"claves": set(c), "titulos": [(v["titulo"], "La Voz de Galicia")], "voz": v})
+        else:
+            g["voz"] = g["voz"] or v
+            g["titulos"].append((v["titulo"], "La Voz de Galicia"))
+    salida = []
+    for g in grupos:
+        medios = sorted({m for _, m in g["titulos"]})
+        if len(medios) < minimo_medios:
+            continue
+        principal = g["voz"]["titulo"] if g["voz"] else g["titulos"][0][0]
+        otros = [t for t, _ in g["titulos"] if t != principal]
+        texto = (g["voz"]["descripcion"] + " " if g["voz"] and g["voz"]["descripcion"] else "")
+        texto += "Otros titulares: " + " / ".join(dict.fromkeys(otros[:4])) if otros else ""
+        salida.append({"titulo": principal, "fuente": f"{len(medios)} medios gallegos y nacionales",
+                       "categoria": "Galicia", "texto": texto.strip()[:1500], "medios": len(medios),
+                       "enlace": g["voz"]["enlace"] if g["voz"] else "", "ts": 0})
+    salida.sort(key=lambda n: -n["medios"])
+    return salida[:maximo]
+
+
 def recoger(espera_max=300, js=None):
     """Devuelve el diccionario con las noticias del día tal y como las ha elegido el noticiario.
     Con «js», evalúa ese código en la página y devuelve su resultado tal cual (diagnóstico)."""

@@ -495,6 +495,16 @@ def fuentes_galicia():
     nota("Fuentes de Galicia", "\n".join(resumen))
 
 
+def galicia():
+    """Lo que el robot añadiría hoy como noticias de toda Galicia (las que más medios cuentan)."""
+    import json
+    from . import dropbox, noticias
+    lista = noticias.galicia(maximo=8, minimo_medios=2)
+    dropbox.subir(dropbox.token_acceso(), "/Pruebas/Galicia de hoy.json",
+                  json.dumps(lista, ensure_ascii=False, indent=1, default=str).encode("utf-8"))
+    nota("Galicia", f"{len(lista)} noticias con 2 o más medios · medios: {[n['medios'] for n in lista]}")
+
+
 def config_whisper():
     from . import config
     return config.WHISPER_MODELO
@@ -518,6 +528,6 @@ if __name__ == "__main__":
             {"elpais": elpais, "noticias": noticias, "voz": voz, "guion": guion, "edge": edge,
              "piper": piper, "vozlarga": vozlarga, "planes": planes, "busqueda": busqueda, "cortes": cortes,
              "muestras": muestras, "recortar": recortar, "timbre": timbre, "estado": estado,
-             "fuentes_galicia": fuentes_galicia}[prueba]()
+             "fuentes_galicia": fuentes_galicia, "galicia": galicia}[prueba]()
         except Exception as e:
             nota(f"Diagnóstico {prueba}", traceback.format_exc()[-1500:], "warning")
