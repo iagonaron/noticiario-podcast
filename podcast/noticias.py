@@ -180,8 +180,9 @@ def _elpais_antes(ctx):
     return None, " · ".join(intentos)
 
 
-def recoger(espera_max=300):
-    """Devuelve el diccionario con las noticias del día tal y como las ha elegido el noticiario."""
+def recoger(espera_max=300, js=None):
+    """Devuelve el diccionario con las noticias del día tal y como las ha elegido el noticiario.
+    Con «js», evalúa ese código en la página y devuelve su resultado tal cual (diagnóstico)."""
     from playwright.sync_api import sync_playwright
 
     estadistica = {"directas": 0, "por_proxy": 0}
@@ -224,9 +225,11 @@ def recoger(espera_max=300):
             pagina.wait_for_function(LISTO, timeout=espera_max * 1000, polling=1000)
             segundos = time.time() - t0
             util.log(f"Noticiario cargado en {segundos:.0f} s")
-            datos = pagina.evaluate(EXTRAER)
+            datos = pagina.evaluate(js or EXTRAER)
         finally:
             nav.close()
+    if js:
+        return datos
     datos["carga"] = {"segundos": round(segundos), **estadistica}
     _madrid(datos)
     return _depurar(datos)

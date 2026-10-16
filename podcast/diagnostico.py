@@ -405,6 +405,44 @@ def timbre():
     nota("Timbre", "\n".join(resumen))
 
 
+EXPLORAR = r"""
+async () => {
+  const corta = (t, n) => (t || "").replace(/\s+/g, " ").trim().slice(0, n);
+  const out = {state: Object.keys(STATE), secciones: {}, tarjetas: {}};
+  for (const [k, v] of Object.entries(STATE.sections || {})) {
+    out.secciones[k] = (Array.isArray(v) ? v : []).map(it => ({t: corta(it.title, 160), f: it.source || "",
+      c: it.category || "", esp: !!it.isSpecial}));
+  }
+  for (const [k, v] of Object.entries(STATE.cards || {})) {
+    const lista = Array.isArray(v) ? v : (v && (v.items || v.articles || v.list || v.data)) || [];
+    out.tarjetas[k] = {tipo: Array.isArray(v) ? "lista" : typeof v,
+      claves: (v && typeof v === "object" && !Array.isArray(v)) ? Object.keys(v).slice(0, 25) : [],
+      n: Array.isArray(lista) ? lista.length : 0,
+      items: (Array.isArray(lista) ? lista : []).slice(0, 40).map(it => ({t: corta(it.title, 160), f: it.source || "",
+        c: it.category || ""}))};
+  }
+  for (const k of Object.keys(STATE)) {
+    if (k === "sections" || k === "cards") continue;
+    const v = STATE[k];
+    out["tipo_" + k] = Array.isArray(v) ? ("lista " + v.length) : typeof v;
+  }
+  return out;
+}
+"""
+
+
+def estado():
+    """Qué tiene el noticiario por dentro (secciones y tarjetas con sus titulares), en Dropbox
+    /Pruebas/Estado del noticiario.json, para entender de dónde sale cada sección."""
+    import json
+    from . import dropbox, noticias
+    d = noticias.recoger(js=EXPLORAR)
+    dropbox.subir(dropbox.token_acceso(), "/Pruebas/Estado del noticiario.json",
+                  json.dumps(d, ensure_ascii=False, indent=1).encode("utf-8"))
+    nota("Estado del noticiario", f"claves: {d.get('state')} · secciones: "
+                                  f"{ {k: len(v) for k, v in d.get('secciones', {}).items()} } · tarjetas: {len(d.get('tarjetas', {}))}")
+
+
 def config_whisper():
     from . import config
     return config.WHISPER_MODELO
@@ -427,6 +465,6 @@ if __name__ == "__main__":
         try:
             {"elpais": elpais, "noticias": noticias, "voz": voz, "guion": guion, "edge": edge,
              "piper": piper, "vozlarga": vozlarga, "planes": planes, "busqueda": busqueda, "cortes": cortes,
-             "muestras": muestras, "recortar": recortar, "timbre": timbre}[prueba]()
+             "muestras": muestras, "recortar": recortar, "timbre": timbre, "estado": estado}[prueba]()
         except Exception as e:
             nota(f"Diagnóstico {prueba}", traceback.format_exc()[-1500:], "warning")
