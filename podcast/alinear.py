@@ -341,10 +341,41 @@ def cortes(wav_bytes, textos):
         # (en los extremos de la tanda no se mira: ahí la transcripción suele dar tiempos imprecisos)
         if turnos[i] and ((i > 0 and turnos[i]["ini"] < a - 0.15) or (i < n - 1 and turnos[i]["fin"] > b + 0.15)):
             raise ErrorAlineado(f"el turno {i + 1} tiene palabras fuera de su trozo")
+    limpios = 0
+    if not _REGLA_VIEJA:
+        for i in range(n):
+            a, b, q = _limpiar(env, umbral, sil, tramos[i][0], tramos[i][1], turnos[i])
+            tramos[i] = (a, b)
+            limpios += q
     resumen = (f"{n} turnos · transcripción {'sí' if rec else 'no'} ({cobertura:.0%} de palabras) · "
                f"{sum(1 for f in fijos if f is not None)}/{n - 1} cortes fijados por la transcripción · "
-               f"{bordes} con palabras sin reconocer junto al corte · {ritmo:.0f} letras/s")
+               f"{bordes} con palabras sin reconocer junto al corte · {limpios} bordes limpiados · {ritmo:.0f} letras/s")
     return tramos, resumen
+
+
+def _limpiar(env, umbral, sil, a, b, t):
+    """Quita de los bordes de un trozo lo que suena sin ser ninguna palabra del guion: una sílaba
+    suelta antes de empezar la frase, una respiración, la etiqueta de pausa a medio leer…
+
+    Solo si la transcripción oyó la primera (o la última) palabra del turno justo donde toca, y lo
+    que sobra es corto (menos de medio segundo) y está separado de la frase por un silencio claro.
+    Devuelve (inicio, fin, bordes limpiados)."""
+    if not t:
+        return a, b, 0
+    quitados = 0
+    if t["resto_ini"] == 0:
+        antes = [s for s in sil if s[2] >= 0.12 and s[1] > a and s[1] <= t["ini"] + 0.05]
+        if antes:
+            s0, s1, _ = antes[-1]
+            if 0.04 <= _voz_entre(env, umbral, a, max(a, s0)) <= 0.45:
+                a, quitados = s1 - 0.06, quitados + 1
+    if t["resto_fin"] == 0:
+        despues = [s for s in sil if s[2] >= 0.12 and s[0] >= t["fin"] - 0.05 and s[0] < b]
+        if despues:
+            s0, s1, _ = despues[0]
+            if 0.04 <= _voz_entre(env, umbral, min(s1, b), b) <= 0.45:
+                b, quitados = s0 + 0.10, quitados + 1
+    return a, b, quitados
 
 
 def recortar(wav_bytes, inicio, fin):

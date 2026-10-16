@@ -560,6 +560,41 @@ def _voz_con_modelo(via, modelo, clave, lotes):
     return piezas
 
 
+def _corregir_derivas(via, modelo, clave, turnos, piezas):
+    """Si unas cuantas frases seguidas de una voz suenan a otro personaje (Gemini cambia a veces de
+    registro a mitad de un lote, sobre todo en noticias serias), se rehacen en una petición aparte y
+    se quedan las nuevas si se parecen más a la voz de siempre. Como mucho dos tramos por voz."""
+    import numpy as np
+    from . import alinear, huella
+    orden = [idx for idx, _ in turnos]
+    textos = dict(turnos)
+    hs = [huella.huella(alinear.a_mono16k(piezas[i])) for i in orden]
+    tramos, dist = huella.derivas(hs)
+    for a, b in tramos[:2]:
+        idxs = orden[a:b + 1]
+        resto = [h for k, h in enumerate(hs) if h and not a <= k <= b]
+        ref = np.median([h["forma"] for h in resto], axis=0)
+
+        def lejos(h):
+            return float(np.sqrt(np.mean((h["forma"] - ref) ** 2))) if h else 99.0
+
+        antes = float(np.median([lejos(hs[k]) for k in range(a, b + 1)]))
+        anota(f"    ♺ {nombre(clave)}: {len(idxs)} frases seguidas suenan distintas ({antes:.1f} dB): las rehago")
+        try:
+            nuevas = _voz_con_modelo(via, modelo, clave, [[(i, textos[i]) for i in idxs]])
+        except Exception as e:
+            anota(f"      no se pudo ({str(e)[:120]}); se quedan las de antes")
+            break
+        despues = float(np.median([lejos(huella.huella(alinear.a_mono16k(nuevas[i]))) for i in idxs]))
+        if despues < antes * 0.8:
+            for i in idxs:
+                piezas[i] = nuevas[i]
+            anota(f"      ✓ rehechas: {antes:.1f} → {despues:.1f} dB")
+        else:
+            anota(f"      se quedan las de antes ({antes:.1f} → {despues:.1f} dB)")
+    return piezas
+
+
 def _reserva_turnos(clave, turnos, carpeta):
     """Una voz entera con Edge o, si no deja, con Piper (sin conexión), turno a turno."""
     lista = [{"bloque": "voz", "turnos": [{"voz": clave, "texto": t, "bloque": "voz"}]} for _, t in turnos]
@@ -590,7 +625,12 @@ def sintetizar_por_voces(segmentos, carpeta):
                 anota(f"Voz de {nombre(clave)} ({config.LOCUTORES[clave]['gemini']}) con {modelo} ({via}) · "
                       f"{len(turnos)} turnos en {len(lotes)} lotes")
                 try:
-                    wavs.update(_voz_con_modelo(via, modelo, clave, lotes))
+                    piezas = _voz_con_modelo(via, modelo, clave, lotes)
+                    try:
+                        piezas = _corregir_derivas(via, modelo, clave, turnos, piezas)
+                    except Exception as e:          # la comprobación nunca debe tumbar el episodio
+                        anota(f"    (comprobación de timbre no disponible: {type(e).__name__}: {str(e)[:100]})")
+                    wavs.update(piezas)
                     motores[clave] = modelo
                     hecho = True
                     break
