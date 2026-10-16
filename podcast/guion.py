@@ -56,10 +56,19 @@ def _bloques(datos):
     return hay
 
 
+def _locales_a_contar(datos):
+    """En local se cuentan 3 (o 4 si de Galicia hay algo que cuentan muchos medios)."""
+    hay = len(datos.get("local") or [])
+    gordo = any((it.get("medios") or 0) >= config.MEDIOS_NOTICIA_GORDA for it in (datos.get("local") or [])
+                if isinstance(it, dict))
+    return min(hay, config.LOCAL_MAX + (1 if gordo else 0))
+
+
 def _palabras_bloque(datos, b):
     if b == "distinto":
         return config.REPARTO["distinto"]
-    return len(datos.get(b) or []) * config.PALABRAS_POR_NOTICIA[b]
+    n = _locales_a_contar(datos) if b == "local" else len(datos.get(b) or [])
+    return n * config.PALABRAS_POR_NOTICIA[b]
 
 
 def _objetivo(datos):
@@ -71,6 +80,8 @@ def _objetivo(datos):
 def instrucciones(n_noticias, con_plan, datos=None):
     datos = datos or {"titulares": [1] * 7, "local": [1] * 3, "interes": [1] * 3, "distinto_basico": con_plan}
     minimo, maximo = _objetivo(datos)
+    local_n = _locales_a_contar(datos)
+    local_n = f"{local_n} (tres de siempre y una más por lo gordo de Galicia)" if local_n > config.LOCAL_MAX else str(local_n)
     reparto = ", ".join(f"{b} {_palabras_bloque(datos, b)}" + (f" (unas {config.PALABRAS_POR_NOTICIA[b]} por noticia)"
                                                                if b in config.PALABRAS_POR_NOTICIA else "")
                         for b in _bloques(datos))
@@ -98,12 +109,12 @@ FORMATO: DIÁLOGO CONSTANTE ENTRE DOS VOCES
 
 BLOQUES, EN ESTE ORDEN (antes, el programa ya dice la fecha, los cumpleaños, la agenda y el tiempo: no hables de eso)
 1. titulares: las noticias de «titulares» (la portada de El País Exprés). Empieza directamente con la primera, sin preámbulos.
-2. local: las noticias de «local» (A Coruña y Galicia), con un enlace muy corto al empezar («Y aquí, en Coruña…»).
+2. local: de A Coruña y de toda Galicia, con un enlace muy corto al empezar («Y aquí, en Galicia…», «Y en Coruña…»). En «local» te paso más de las que caben: ELIGE {local_n} por importancia para alguien que vive en A Coruña (lo que pasa en toda Galicia cuenta tanto como lo de Coruña). Si en Galicia ha pasado algo gordo —un terremoto que se ha notado, un temporal, un incendio grave, un accidente con víctimas, una sequía, una huelga general…— va SIEMPRE y la primera. «medios» dice cuántos medios la están contando: cuantos más, más importante. Las que no elijas, ni las menciones.
 3. interes: las de «interes» (ciencia, salud, economía, tecnología…). Si hay alertas sanitarias, se dicen claras al final de este bloque; si no hay, ni se mencionan.{chr(10) + "4. distinto: el momento Distinto Básico." if con_plan else ""}
 Entre una noticia y la siguiente sonará una ráfaga de música, así que no hacen falta frases de enlace del tipo «cambiando de tema».
 
 QUÉ CONTAR
-- Cuenta TODAS las noticias que te paso ({n_noticias} en total), salvo las repetidas y las que sean solo del tiempo.
+- Cuenta TODAS las de «titulares» e «interes» y las {local_n} locales que elijas ({n_noticias} en total), salvo las repetidas y las que sean solo del tiempo.
 - Para cada noticia: qué ha pasado, explicado fácil; por qué importa o en qué le afecta a una persona normal; y, si lo hay, un detalle curioso o qué va a pasar ahora.
 - Las dos más importantes del día, con algo más de calma; el resto, en cuatro turnos.
 - Usa SOLO la información que te paso. No inventes datos, nombres, cifras, fechas ni declaraciones.
@@ -121,6 +132,23 @@ SALIDA
 - Solo el JSON con «segmentos»: cada turno con «bloque», «noticia», «voz» (A o B) y «texto» (exactamente lo que se dice)."""
 
 
+def candidatas_locales(noticias):
+    """Las locales del noticiario (sobre todo de Coruña) más lo que más medios cuentan de toda Galicia,
+    sin repetir. Cada una con «medios» si se sabe cuántos medios la cuentan. El guionista elige."""
+    from .noticias import misma_noticia
+    locales = [{"titulo": it["titulo"], "fuente": it.get("fuente", ""), "categoria": it.get("categoria", ""),
+                "texto": util.quitar_url(it.get("texto", ""))[:config.TEXTO_MAX_NOTICIA]}
+               for it in (noticias.get("local") or [])[:config.LOCAL_CANDIDATAS]]
+    for g in noticias.get("galicia") or []:
+        igual = next((l for l in locales if misma_noticia(l["titulo"], g["titulo"])), None)
+        if igual:
+            igual["medios"] = g["medios"]
+        else:
+            locales.append({"titulo": g["titulo"], "fuente": g["fuente"], "categoria": "Galicia",
+                            "texto": g["texto"][:config.TEXTO_MAX_NOTICIA], "medios": g["medios"]})
+    return locales
+
+
 def _datos_para_guionista(hoy_dt, noticias, plan=None):
     def items(lista):
         return [{"titulo": it["titulo"], "fuente": it.get("fuente", ""), "categoria": it.get("categoria", ""),
@@ -129,7 +157,7 @@ def _datos_para_guionista(hoy_dt, noticias, plan=None):
     datos = {
         "fecha": util.fecha_larga(hoy_dt) + f" de {hoy_dt.year}",
         "titulares": items(noticias.get("portada")),
-        "local": items((noticias.get("local") or [])[:config.LOCAL_MAX]),
+        "local": candidatas_locales(noticias),
         "interes": items(noticias.get("interes")),
         "alertas_sanitarias": noticias.get("alertas_sanitarias") or [],
     }
@@ -293,7 +321,8 @@ def guion_sin_ia(hoy_dt, noticias):
     for bloque, clave in (("titulares", "portada"), ("local", "local"), ("interes", "interes")):
         lista = noticias.get(clave) or []
         if bloque == "local":
-            lista = lista[:config.LOCAL_MAX]
+            gordas = [g for g in noticias.get("galicia") or [] if g.get("medios", 0) >= config.MEDIOS_NOTICIA_GORDA]
+            lista = (gordas[:1] + lista)[:config.LOCAL_MAX + (1 if gordas else 0)]
         for it in lista:
             n += 1
             f = frases(util.quitar_url(it.get("texto", "")))
@@ -319,7 +348,7 @@ def escribir(hoy_dt, noticias, plan=None):
     si hay propuesta, el momento Distinto Básico."""
     info = {"modelo": None, "avisos": []}
     datos = _datos_para_guionista(hoy_dt, noticias, plan)
-    n = sum(len(datos[k]) for k in ("titulares", "interes", "local"))
+    n = len(datos["titulares"]) + len(datos["interes"]) + _locales_a_contar(datos)
     usuario = "DATOS DE HOY (JSON):\n" + json.dumps(datos, ensure_ascii=False)
     sistema = instrucciones(n, bool(plan), datos)
     segs, modelo, errores = _pedir_guion(sistema, usuario)

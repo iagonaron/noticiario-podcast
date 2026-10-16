@@ -61,7 +61,24 @@ def recoger_noticias(hoy, diag):
         avisos.append("No se pudo leer la Portada de El País Exprés.")
     elif not noticias.portada_es_de_hoy(datos, hoy):
         avisos.append("La Portada de El País Exprés aún era la de ayer.")
+    # lo que más medios cuentan de toda Galicia (el noticiario elige sus locales sobre todo de Coruña)
+    try:
+        datos["galicia"] = noticias.galicia()
+        diag.append(f"Galicia: {len(datos['galicia'])} noticias contadas por 3 o más medios · "
+                    f"medios {[g['medios'] for g in datos['galicia']]}")
+    except Exception as e:
+        datos["galicia"] = []
+        avisos.append(f"No se pudo mirar lo más contado de Galicia: {type(e).__name__}: {str(e)[:120]}")
     return datos, avisos
+
+
+def subir_candidatas(token, datos):
+    """Las noticias candidatas de cada sección (titulares, fuente y cuántos medios) a la carpeta privada
+    de Dropbox, para poder ver después por qué entró o no entró una noticia."""
+    resumen = {s: [{"titulo": it.get("titulo"), "fuente": it.get("fuente"), "medios": it.get("medios")}
+                   for it in datos.get(s) or []] for s in ("portada", "local", "galicia", "interes")}
+    dropbox.subir(token, config.DROPBOX_CANDIDATAS,
+                  json.dumps(resumen, ensure_ascii=False, indent=1).encode("utf-8"))
 
 
 def lo_rapido(textos, primera_voz):
@@ -146,6 +163,11 @@ def main():
     # 1) noticias
     etapa("noticias")
     datos, av = recoger_noticias(hoy, diag)
+    if token:
+        try:
+            subir_candidatas(token, datos)
+        except Exception as e:
+            av.append(f"Candidatas: no se pudieron guardar ({type(e).__name__})")
     avisos += av
     diag += ["Fuentes del noticiario:"] + [f"  {l}" for l in (datos.get("diagnostico") or [])]
     util.log(f"Noticias: portada {len(datos['portada'])}, interés {len(datos['interes'])}, local {len(datos['local'])}")

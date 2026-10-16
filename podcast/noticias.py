@@ -235,6 +235,11 @@ def _parecidas(a, b):
     return len(comunes) >= 2 and len(comunes) / max(1, min(len(a), len(b))) >= 0.4
 
 
+def misma_noticia(titulo_a, titulo_b):
+    """¿Dos titulares cuentan lo mismo? (para no repetir una noticia que ya trae el noticiario)"""
+    return _parecidas(_claves(titulo_a), _claves(titulo_b))
+
+
 def galicia(maximo=3, minimo_medios=3, horas=24):
     """Lo que más medios están contando de Galicia en las últimas horas, con el texto de La Voz si lo
     hay. Cada noticia lleva «medios» (cuántos medios distintos la cuentan). Sin IA y sin cupo."""
@@ -268,6 +273,17 @@ def galicia(maximo=3, minimo_medios=3, horas=24):
         else:
             g["voz"] = g["voz"] or v
             g["titulos"].append((v["titulo"], "La Voz de Galicia"))
+    # segunda pasada: dos grupos que han acabado hablando de lo mismo se juntan
+    juntos = []
+    for g in grupos:
+        h = next((h for h in juntos if _parecidas(g["claves"], h["claves"])), None)
+        if h is None:
+            juntos.append(g)
+        else:
+            h["titulos"] += g["titulos"]
+            h["claves"] |= g["claves"]
+            h["voz"] = h["voz"] or g["voz"]
+    grupos = juntos
     salida = []
     for g in grupos:
         medios = sorted({m for _, m in g["titulos"]})

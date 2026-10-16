@@ -35,7 +35,9 @@ PALABRAS_POR_NOTICIA = {"titulares": 140, "local": 110, "interes": 150}
 # «low» = el guionista piensa menos y tarda la mitad, pero se queda corto de longitud; vacío = lo normal
 GUION_PENSAR = os.environ.get("GUION_PENSAR") or ""
 PLAN_ESPERA_MAX = 420        # segundos desde el inicio que se espera como mucho la propuesta del Distinto Básico
-LOCAL_MAX = 3                # noticias de Coruña y Galicia que entran
+LOCAL_MAX = 3                # noticias de Coruña y Galicia que se cuentan (una más si hay algo gordo)
+LOCAL_CANDIDATAS = 6         # locales del noticiario que se le pasan al guionista para que elija
+MEDIOS_NOTICIA_GORDA = 6     # si una noticia de Galicia la cuentan tantos medios, va siempre (como cuarta)
 # Pruebas (PRUEBA=si): el resultado va a la subcarpeta «Pruebas» de Dropbox y, además, se usan
 # otros modelos de Gemini. El cupo diario gratuito es pequeño y se renueva a medianoche de
 # California (las 9:00 en Madrid), así que una prueba hecha durante el día sale del cupo del
@@ -109,6 +111,8 @@ DROPBOX_MUSICA = "/musica"   # intro / transicion / cierre (.mp3 o .wav); si no 
 DROPBOX_DIAGNOSTICO = _PREFIJO + "/Diagnóstico.txt"   # datos técnicos de la última ejecución
 # lotes de voz tal cual salen de Gemini, con sus textos y cortes (se sobrescriben en cada ejecución)
 DROPBOX_CRUDO = "/Pruebas/Crudo de la prueba" if PRUEBA else "/Pruebas/Crudo del episodio"
+# las noticias candidatas de cada sección (para ver por qué entró o no entró una noticia)
+DROPBOX_CANDIDATAS = "/Pruebas/Noticias candidatas (prueba).json" if PRUEBA else "/Pruebas/Noticias candidatas.json"
 
 # ---------------------------------------------------------------- montaje
 MP3_KBPS = "96k"
