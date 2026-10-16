@@ -211,6 +211,142 @@ def muestras(urls):
     nota("Muestras de música", "\n".join(filas))
 
 
+def _leer(ruta, sr=44100):
+    """Audio estéreo en float32 (2, n) a 44,1 kHz."""
+    import numpy as np
+    pcm = subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-i", ruta, "-ac", "2", "-ar", str(sr),
+                          "-f", "f32le", "-"], capture_output=True, check=True).stdout
+    return np.frombuffer(pcm, np.float32).reshape(-1, 2).T.copy()
+
+
+def _escribir(x, ruta, sr=44100):
+    import numpy as np
+    pico = float(np.max(np.abs(x))) or 1.0
+    x = x * (0.97 / pico if pico > 0.97 else 1.0)
+    subprocess.run(["ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-f", "f32le", "-ar", str(sr), "-ac", "2",
+                    "-i", "-", ruta], input=x.T.astype(np.float32).tobytes(), check=True)
+
+
+def _separar(ruta):
+    """Demucs (htdemucs): {'drums', 'bass', 'other', 'vocals'} → (2, n) float32 a 44,1 kHz."""
+    import numpy as np
+    import torch
+    from demucs.apply import apply_model
+    from demucs.pretrained import get_model
+    modelo = get_model("htdemucs")
+    modelo.eval()
+    x = torch.from_numpy(_leer(ruta, modelo.samplerate))
+    ref = x.mean(0)
+    media, desv = ref.mean(), ref.std() + 1e-8
+    with torch.no_grad():
+        fuentes = apply_model(modelo, ((x - media) / desv)[None], device="cpu", split=True, overlap=0.25,
+                              progress=False)[0]
+    fuentes = fuentes * desv + media
+    return {n: fuentes[i].numpy().astype(np.float32) for i, n in enumerate(modelo.sources)}
+
+
+def _filtro(x, args, tmp, nombre):
+    """Pasa audio (2, n) por un filtro de ffmpeg y lo devuelve igual de largo."""
+    import numpy as np
+    ent, sal = os.path.join(tmp, f"{nombre}-e.wav"), os.path.join(tmp, f"{nombre}-s.wav")
+    _escribir(x, ent)
+    subprocess.run(["ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-i", ent, "-af", args, sal], check=True)
+    y = _leer(sal)
+    n = x.shape[1]
+    return y[:, :n] if y.shape[1] >= n else np.pad(y, ((0, 0), (0, n - y.shape[1])))
+
+
+def _subir_tono(x, semitonos, tmp, nombre):
+    """Más aguda sin cambiar el tempo (rubberband si ffmpeg lo trae; si no, asetrate+atempo)."""
+    r = 2 ** (semitonos / 12)
+    try:
+        return _filtro(x, f"rubberband=pitch={r:.6f}:pitchq=quality:transients=crisp", tmp, nombre)
+    except subprocess.CalledProcessError:
+        return _filtro(x, f"asetrate={44100 * r:.0f},aresample=44100,atempo={1 / r:.6f}", tmp, nombre)
+
+
+def _inicio_del_ritmo(bateria, sr=44100):
+    """Segundo en el que la batería ya suena con fuerza (para que la cama empiece con ritmo)."""
+    import numpy as np
+    mono = bateria.mean(0)
+    v = int(sr * 0.5)
+    energia = np.array([np.sqrt(np.mean(mono[i:i + v] ** 2)) for i in range(0, len(mono) - v, v)])
+    if len(energia) < 12:
+        return 0.0
+    suave = np.convolve(energia, np.ones(8) / 8, mode="valid")
+    umbral = 0.6 * np.median(suave)
+    for k, e in enumerate(suave):
+        if e >= umbral:
+            return k * 0.5 + 1.0
+    return 0.0
+
+
+def afinar(url, variantes=("2", "3/4", "4")):
+    """Versiones de una pista para la cama musical: sin caja (se separa la batería con Demucs y se deja
+    solo el bombo y los platos), más aguda (+semitonos, el tempo igual o un poco más rápido: «3/4» es
+    +3 semitonos y un 4 % más rápida) y empezando donde ya suena el ritmo. Cada versión va a Dropbox
+    /Pruebas/Pistas afinadas/ y, como trozo de programa real, a /Pruebas/Músicas para elegir/."""
+    import numpy as np
+    from . import dropbox, montaje
+    token = dropbox.token_acceso()
+    piezas = _voz_de_muestra(token)
+    filas = []
+    nombre_pista = url.rstrip("/").split("/")[-1].replace(".mp3", "")
+    with tempfile.TemporaryDirectory() as tmp:
+        orig = os.path.join(tmp, "orig.mp3")
+        with open(orig, "wb") as f:
+            f.write(bajar(url))
+        partes = _separar(orig)
+        tonal = partes["bass"] + partes["other"] + partes["vocals"]
+        # sin caja: del canal de batería solo queda el bombo (graves) y los platos (agudos)
+        bateria = _filtro(partes["drums"],
+                          "asplit[a][b];[a]lowpass=f=115,lowpass=f=115[g];[b]highpass=f=9000,highpass=f=9000[p];"
+                          "[g][p]amix=inputs=2:normalize=0", tmp, "bateria")
+        bateria *= 1.25
+        t0 = _inicio_del_ritmo(partes["drums"])
+        for k, var in enumerate(variantes, 1):
+            semitonos, _, tempo = var.partition("/")
+            semitonos, tempo = float(semitonos or 0), float(tempo or 0)
+            mezcla = _subir_tono(tonal, semitonos, tmp, f"tono{k}") + bateria
+            if tempo:
+                mezcla = _filtro(mezcla, f"atempo={1 + tempo / 100:.4f}", tmp, f"tempo{k}")
+                inicio = t0 / (1 + tempo / 100)
+            else:
+                inicio = t0
+            mezcla = mezcla[:, int(inicio * 44100):]
+            fundido = np.linspace(0, 1, 441)
+            mezcla[:, :441] *= fundido
+            etiqueta = f"{nombre_pista} {'+' if semitonos >= 0 else ''}{semitonos:g} semitonos" + (f" {tempo:+g} %" if tempo else "")
+            pista = os.path.join(tmp, f"pista{k}.mp3")
+            wav = os.path.join(tmp, f"pista{k}.wav")
+            _escribir(mezcla, wav)
+            _ffmpeg("-i", wav, "-b:a", "192k", pista)
+            dropbox.subir(token, f"/Pruebas/Pistas afinadas/{etiqueta}.mp3", open(pista, "rb").read())
+            musica = montaje.cargar_musica({"fondo": open(pista, "rb").read()})
+            prog_wav, prog_mp3 = os.path.join(tmp, f"m{k}.wav"), os.path.join(tmp, f"m{k}.mp3")
+            dur = montaje.montar(piezas, musica, prog_wav)
+            montaje.a_mp3(prog_wav, prog_mp3, {"title": etiqueta})
+            dropbox.subir(token, f"/Pruebas/Músicas para elegir/2{chr(96 + k)} {etiqueta}.mp3", open(prog_mp3, "rb").read())
+            filas.append(f"2{chr(96 + k)} · {etiqueta} · empieza en {inicio:.1f}s · muestra de {dur:.0f}s")
+    nota("Pistas afinadas", "\n".join(filas))
+
+
+def usar(ruta):
+    """Pone como cama musical un fichero que ya está en Dropbox (p. ej. una pista afinada), guardando
+    antes una copia de la cama de ahora."""
+    import datetime as dt
+    from . import dropbox
+    token = dropbox.token_acceso()
+    actual = dropbox.descargar(token, "/musica/fondo.mp3")
+    if actual:
+        dropbox.subir(token, f"/musica/fondo - copia {dt.datetime.now():%Y-%m-%d %H%M}.mp3", actual)
+    nueva = dropbox.descargar(token, ruta)
+    if not nueva:
+        raise SystemExit(f"no encuentro {ruta}")
+    dropbox.subir(token, "/musica/fondo.mp3", nueva)
+    nota("Cama musical cambiada", f"ahora: {ruta} · copia de la anterior en /musica")
+
+
 def fondo(url):
     """Guarda la pista entera (sin el silencio inicial) como cama musical del programa."""
     from . import dropbox
@@ -260,6 +396,10 @@ if __name__ == "__main__":
         fondo(resto[0])
     elif modo == "muestras":
         muestras(resto)
+    elif modo == "afinar":
+        afinar(resto[0], tuple(resto[1:]) or ("2", "3/4", "4"))
+    elif modo == "usar":
+        usar(" ".join(resto))
     elif modo == "preparar":
         preparar(resto[0])
     else:

@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
     inputs:
       modo:
-        description: "listar, analizar, describir, muestras o fondo"
+        description: "listar, analizar, describir, muestras, afinar, usar o fondo"
         required: false
         default: "listar"
         type: string
@@ -25,7 +25,7 @@ permissions:
 jobs:
   musica:
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 35
     env:
       DROPBOX_APP_KEY: ${{ secrets.DROPBOX_APP_KEY }}
       DROPBOX_APP_SECRET: ${{ secrets.DROPBOX_APP_SECRET }}
@@ -40,5 +40,9 @@ jobs:
           python-version: "3.12"
       - run: |
           pip install numpy pydub requests
+          if [ "$MODO" = "afinar" ]; then
+            pip install torch==2.5.1 torchaudio==2.5.1 --index-url https://download.pytorch.org/whl/cpu
+            pip install demucs==4.0.1
+          fi
           command -v ffmpeg || (sudo apt-get update -y && sudo apt-get install -y ffmpeg)
       - run: python -m podcast.musica_libre "${MODO:-listar}" $ENLACES
