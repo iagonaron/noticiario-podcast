@@ -10,6 +10,7 @@
     python -m podcast.diagnostico pronuncia  → cómo dicen las voces la x gallega (1 petición por voz; MP3 en
                                                Dropbox /Pruebas/Pronunciación/)
     python -m podcast.diagnostico fricativas → mide el «soplo» de la x en esos MP3 (sin gastar cupo)
+    python -m podcast.diagnostico pausas     → cuánto silencio traen los lotes guardados (CRUDO; sin cupo)
 """
 import io
 import json
