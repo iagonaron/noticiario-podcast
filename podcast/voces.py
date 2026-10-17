@@ -26,7 +26,7 @@ import wave
 
 import requests
 
-from . import config, util
+from . import config, pronuncia, util
 
 URL_INTERACTIONS = "https://generativelanguage.googleapis.com/v1beta/interactions"
 URL_GENERATE = "https://generativelanguage.googleapis.com/v1beta/models/{modelo}:generateContent"
@@ -63,6 +63,12 @@ def duracion_wav(datos):
         return w.getnframes() / float(w.getframerate())
 
 
+def _texto_voz(texto):
+    """Lo que leen las voces: sin emojis y con algunas palabras escritas como suenan (pronuncia.py:
+    la x gallega, «Xunta» → «Shunta»). El guion escrito no cambia."""
+    return pronuncia.para_voz(util.sin_emojis(texto))
+
+
 def _frases(texto, maximo):
     if len(texto) <= maximo:
         return [texto]
@@ -85,7 +91,7 @@ def tandas(segmentos, maximo=None):
     maximo = maximo or config.VOZ_MAX_CARACTERES
     salida = []
     for s in segmentos:
-        for t in _frases(util.sin_emojis(s["texto"]), maximo):
+        for t in _frases(_texto_voz(s["texto"]), maximo):
             turno = {"voz": s["voz"], "texto": t, "bloque": s["bloque"], "noticia": s.get("noticia")}
             ultima = salida[-1] if salida else None
             if ultima and _caracteres(ultima) + len(t) <= maximo:
@@ -621,7 +627,7 @@ def sintetizar_por_voces(segmentos, carpeta):
     """Devuelve ({índice de segmento: wav}, {voz: motor}, avisos)."""
     por_voz = {}
     for i, s in enumerate(segmentos):
-        por_voz.setdefault(s["voz"], []).append((i, util.sin_emojis(s["texto"])))
+        por_voz.setdefault(s["voz"], []).append((i, _texto_voz(s["texto"])))
     wavs, motores, avisos = {}, {}, []
     for clave in sorted(por_voz):
         turnos = por_voz[clave]
@@ -659,6 +665,9 @@ def sintetizar_por_voces(segmentos, carpeta):
 def sintetizar(segmentos, carpeta):
     """Devuelve (piezas, motor, avisos). Cada pieza: {'wav', 'bloque', 'noticia', 'voz', 'palabras', 'segundos'}."""
     anota(f"{len(segmentos)} turnos · {sum(len(s['texto']) for s in segmentos)} caracteres")
+    cambiadas = sum(pronuncia.cuantas(util.sin_emojis(s["texto"])) for s in segmentos)
+    if cambiadas:                            # solo la cifra: el registro no lleva nada del texto
+        anota(f"Pronunciación: {cambiadas} palabras escritas como suenan para la voz (x gallega)")
     try:
         wavs, motores, avisos = sintetizar_por_voces(segmentos, carpeta)
         piezas = []

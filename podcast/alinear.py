@@ -43,9 +43,11 @@ def _fichas(texto):
 
 
 def norma(texto):
-    """Palabras en minúsculas, sin tildes ni signos, y las cifras dichas con letras («2026» → dos mil veintiseis)."""
+    """Palabras en minúsculas, sin tildes ni signos, y las cifras dichas con letras («2026» → dos mil veintiseis).
+    «sh» cuenta como «x»: a la voz se le escribe «Shunta» (pronuncia.py) y Whisper puede oír «Xunta»."""
     salida = []
     for tok in _fichas(texto):
+        tok = tok.replace("sh", "x")
         if _num2words and tok.isdigit() and len(tok) <= 9:
             try:
                 salida += _fichas(_num2words(int(tok), lang="es"))

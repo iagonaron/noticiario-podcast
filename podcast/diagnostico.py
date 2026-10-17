@@ -7,6 +7,8 @@
     python -m podcast.diagnostico vozlarga   → una tanda larga, como las del episodio (1 petición si va bien)
     python -m podcast.diagnostico guion      → pide un guion de prueba a Gemini con noticias inventadas
     python -m podcast.diagnostico planes     → propuesta del momento Distinto Básico (va a Dropbox /Pruebas)
+    python -m podcast.diagnostico pronuncia  → cómo dicen las voces la x gallega (1 petición por voz; MP3 en
+                                               Dropbox /Pruebas/Pronunciación/)
 """
 import io
 import json
@@ -266,6 +268,60 @@ def muestras():
             nota(f"Muestra {nombre_voz}", f"OK en {time.time() - t0:.0f}s · {voces.duracion_wav(wav):.1f}s · {modelo}")
         except Exception as e:
             nota(f"Muestra {nombre_voz}", f"FALLO {modelo}: {str(e)[:500]}", "warning")
+
+
+FRASES_X = [
+    "La Xunta de Galicia presentó hoy el plan del Xacobeo.",
+    "En Arteixo, Sanxenxo y Rianxo se esperan lluvias por la tarde.",
+    "Xosé y Uxía viven en Muxía, cerca de Laxe.",
+    "Y esto no cambia: el taxi salió de México con un examen de xilófono.",
+]
+
+
+def pronuncia():
+    """Cómo dicen las voces la x gallega (1 petición por voz, con el primer modelo de MODELOS_VOZ).
+    Cada voz lee primero la frase de la Xunta tal cual (como hasta el 17-oct-2026) y luego todas
+    como se les escriben ahora (pronuncia.py). Deja un MP3 por voz y un informe en Dropbox
+    /Pruebas/Pronunciación/; en la anotación, qué entiende Whisper de cada frase."""
+    import subprocess
+    import numpy as np
+    from . import voces, alinear, config, dropbox, util, pronuncia as pr
+    via, modelo = config.MODELOS_VOZ[0]
+    textos = [FRASES_X[0]] + [pr.para_voz(f) for f in FRASES_X]
+    token = dropbox.token_acceso()
+    m = alinear._modelo()
+    informe = [f"Prueba de pronunciación · {modelo} ({via}) · {util.ahora():%d-%m-%Y %H:%M}",
+               "La frase 1 va escrita como antes («Xunta»); las demás, como se les escriben ahora a las voces.", ""]
+    for clave in ("A", "B"):
+        nombre_voz = f"{voces.nombre(clave)} ({config.LOCUTORES[clave]['gemini']})"
+        voces.CRUDOS.clear()
+        t0 = time.time()
+        try:
+            piezas = voces._voz_con_modelo(via, modelo, clave, [list(enumerate(textos))])
+        except Exception as e:
+            nota(f"Pronunciación {nombre_voz}", f"FALLO {modelo}: {str(e)[:500]}", "warning")
+            informe += [f"{nombre_voz}: no salió ({str(e)[:200]})", ""]
+            continue
+        informe.append(f"{nombre_voz} · {time.time() - t0:.0f}s:")
+        for i, t in enumerate(textos):
+            oido = ""
+            if m:
+                segs, _ = m.transcribe(alinear.a_mono16k(piezas[i]), language="es", beam_size=1,
+                                       vad_filter=False, condition_on_previous_text=False)
+                oido = " ".join(sg.text.strip() for sg in segs)
+            informe.append(f"  {i + 1}. escrito: {t}\n     oído:    {oido}")
+        # lo que dijo Gemini tal cual (sin cortar); si el lote se partió, los trozos seguidos
+        crudos = [c["wav"] for c in voces.CRUDOS if c["voz"] == clave] or [piezas[i] for i in range(len(textos))]
+        silencio = np.zeros(int(alinear.SR * 0.8), np.float32)
+        x = np.concatenate([np.concatenate([alinear.a_mono16k(w), silencio]) for w in crudos])
+        pcm = (np.clip(x, -1, 1) * 32767).astype(np.int16).tobytes()
+        mp3 = subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-f", "s16le", "-ar", str(alinear.SR),
+                              "-ac", "1", "-i", "pipe:0", "-af", "loudnorm=I=-16:TP=-1.5", "-c:a", "libmp3lame",
+                              "-b:a", "128k", "-f", "mp3", "pipe:1"], input=pcm, capture_output=True, check=True).stdout
+        dropbox.subir(token, f"/Pruebas/Pronunciación/{voces.nombre(clave)}.mp3", mp3)
+        informe.append("")
+    dropbox.subir(token, "/Pruebas/Pronunciación/informe.txt", "\n".join(informe).encode("utf-8"))
+    nota("Pronunciación", "\n".join(informe))
 
 
 def _parecido(a, b):
@@ -528,6 +584,6 @@ if __name__ == "__main__":
             {"elpais": elpais, "noticias": noticias, "voz": voz, "guion": guion, "edge": edge,
              "piper": piper, "vozlarga": vozlarga, "planes": planes, "busqueda": busqueda, "cortes": cortes,
              "muestras": muestras, "recortar": recortar, "timbre": timbre, "estado": estado,
-             "fuentes_galicia": fuentes_galicia, "galicia": galicia}[prueba]()
+             "fuentes_galicia": fuentes_galicia, "galicia": galicia, "pronuncia": pronuncia}[prueba]()
         except Exception as e:
             nota(f"Diagnóstico {prueba}", traceback.format_exc()[-1500:], "warning")
