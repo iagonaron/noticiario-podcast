@@ -287,6 +287,33 @@ def _elegir(esperados, candidatos, dur):
     return [candidatos[q][0] for q in elegidos]
 
 
+def silencios_hondos(sil, env, margen=40.0):
+    """Solo los silencios de verdad: muy por debajo de la voz fuerte (no los valles de una frase
+    seguida, que en un audio casi sin pausas también pueden quedar por debajo del umbral). Con 40 dB
+    son, más o menos, los que el montaje quita de verdad (pico − 50 dB en los extremos)."""
+    voz = float(np.percentile(env, 90))
+    i = lambda t: min(len(env) - 1, max(0, int(round(t / PASO))))
+    return [(s0, s1, d) for s0, s1, d in sil if float(np.median(env[i(s0):i(s1) + 1])) < voz - margen]
+
+
+def _hablado(sil, a, b, larga=0.8, queda=0.38):
+    """Lo que dura el tramo [a, b] como quedará en el montaje: sin el silencio de los extremos y con
+    los silencios largos de dentro acortados (montaje._recortar y montaje._acortar_pausas). Un turno
+    con un hueco largo dentro no está mal cortado: el montaje lo arregla sin pedir otra vez la voz."""
+    ini, fin = a, b
+    for s0, s1, _ in sil:
+        if s0 <= ini + 0.02 and s1 > ini:
+            ini = min(s1, b)
+        if s1 >= fin - 0.02 and s0 < fin:
+            fin = max(s0, ini)
+    d = fin - ini
+    for s0, s1, _ in sil:
+        s0, s1 = max(s0, ini), min(s1, fin)
+        if s1 - s0 >= larga:
+            d -= (s1 - s0) - queda
+    return max(0.0, d)
+
+
 def cortes(wav_bytes, textos):
     """Devuelve [(inicio_s, fin_s)] para cada texto (turno) dentro del audio de la tanda, y un
     resumen técnico. Lanza ErrorAlineado si el resultado no es fiable.
@@ -335,11 +362,17 @@ def cortes(wav_bytes, textos):
     limites = [max(0.0, voz_ini - 0.05)] + puntos + [min(dur, voz_fin + 0.15)]
     tramos = [(limites[i], limites[i + 1]) for i in range(n)]
     # comprobaciones: duración razonable y que las palabras reconocidas de cada turno caen en su trozo
+    try:
+        hondos = silencios_hondos(sil, env)
+    except Exception:                    # si falla, la comprobación de siempre (con los silencios)
+        hondos = []
     for i, ((a, b), t) in enumerate(zip(tramos, textos)):
         palabras = max(1, len(norma(t)))
         esperado = palabras / 2.7
-        if not (0.35 * esperado - 0.4 <= (b - a) <= 2.6 * esperado + 1.2):
-            raise ErrorAlineado(f"un turno de {palabras} palabras quedó en {b - a:.1f}s")
+        hablado = _hablado(hondos, a, b)
+        if not (0.35 * esperado - 0.4 <= (b - a) and hablado <= 2.6 * esperado + 1.2):
+            raise ErrorAlineado(f"un turno de {palabras} palabras quedó en {b - a:.1f}s "
+                                f"({hablado:.1f}s sin silencios largos)")
         # (en los extremos de la tanda no se mira: ahí la transcripción suele dar tiempos imprecisos)
         if turnos[i] and ((i > 0 and turnos[i]["ini"] < a - 0.15) or (i < n - 1 and turnos[i]["fin"] > b + 0.15)):
             raise ErrorAlineado(f"el turno {i + 1} tiene palabras fuera de su trozo")

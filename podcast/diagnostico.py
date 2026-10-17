@@ -312,7 +312,7 @@ def pronuncia():
                 oido = " ".join(sg.text.strip() for sg in segs)
             informe.append(f"  {i + 1}. escrito: {t}\n     oído:    {oido}")
         # lo que dijo Gemini tal cual (sin cortar); si el lote se partió, los trozos seguidos
-        crudos = [c["wav"] for c in voces.CRUDOS if c["voz"] == clave] or [piezas[i] for i in range(len(textos))]
+        crudos = [c["wav"] for c in voces.CRUDOS if c["voz"] == clave and c["tramos"]] or [piezas[i] for i in range(len(textos))]
         silencio = np.zeros(int(alinear.SR * 0.8), np.float32)
         x = np.concatenate([np.concatenate([alinear.a_mono16k(w), silencio]) for w in crudos])
         pcm = (np.clip(x, -1, 1) * 32767).astype(np.int16).tobytes()

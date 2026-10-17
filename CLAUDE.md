@@ -22,6 +22,12 @@
   prueba»), con sus textos y cortes. Si Iago oye un corte mal hecho, el flujo «Diagnóstico» con
   `pruebas` = `recortar` (y `crudo` = esa carpeta) vuelve a cortar esos lotes sin gastar cupo y deja el
   detalle en /Pruebas/Recorte - informe.txt; `cortes_viejos` = `si` compara con la regla anterior.
+- Pausas de Martín (17-oct-2026): Algieba deja a veces silencios de 8 a 18 s entre frases (diagnóstico
+  `pausas`, sin cupo). Antes eso hacía rechazar el lote por «turno demasiado largo» y pedirlo otra vez:
+  el 17-oct su voz gastó 6 peticiones y el episodio 8 de 10. Ahora las comprobaciones de duración
+  (`alinear.cortes` y `voces._razonable`) no cuentan los silencios hondos (≥40 dB bajo la voz), que el
+  montaje quita igual (`alinear._hablado`). Los lotes rechazados también se guardan en el crudo
+  («rechazado»: motivo), para estudiarlos con `recortar` o `pausas`.
 - Bordes de cada frase (16-oct-2026): lo que suena antes de la primera palabra o después de la
   última sin ser del guion (sílaba suelta, respiración, etiqueta a medio leer), corto y separado por
   un silencio, se quita (`alinear._limpiar`). El resumen de cada lote dice cuántos «bordes limpiados».

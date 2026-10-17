@@ -261,11 +261,21 @@ def _piper_tanda(tanda):
 
 
 def _razonable(wav, tanda):
-    """¿Dura lo que debería? (detecta audios cortados o con divagaciones)."""
+    """¿Dura lo que debería? (detecta audios cortados o con divagaciones). Para «demasiado largo» no
+    cuentan los silencios largos: la voz de Martín deja a veces pausas de 8 a 18 s entre frases
+    (17-oct-2026) y no son divagaciones; el montaje las acorta sin tener que pedir otra vez la voz."""
     seg = duracion_wav(wav)
     palabras = sum(util.palabras(t["texto"]) for t in tanda["turnos"])
     esperado = max(1.5, palabras / 2.8)      # ~170 palabras por minuto en conversación
-    return 0.55 * esperado <= seg <= 1.8 * esperado + 3, seg, esperado
+    hablado = seg
+    try:
+        from . import alinear
+        env = alinear.envolvente_db(alinear.a_mono16k(wav))
+        sil, _ = alinear.silencios(env, minimo_s=0.3)
+        hablado = alinear._hablado(alinear.silencios_hondos(sil, env), 0.0, seg)
+    except Exception:                        # si no se puede medir, se mira la duración tal cual
+        pass
+    return 0.55 * esperado <= seg and hablado <= 1.8 * esperado + 3, seg, esperado
 
 
 def _resumen(msg):
@@ -546,7 +556,15 @@ def _voz_con_modelo(via, modelo, clave, lotes):
             if len(lote) == 1:
                 piezas[lote[0][0]] = wav
                 continue
-            tramos, resumen = alinear.cortes(wav, [t for _, t in lote])
+            try:
+                tramos, resumen = alinear.cortes(wav, [t for _, t in lote])
+            except alinear.ErrorAlineado as e:
+                # el lote rechazado también se guarda (sin cortes): así se puede estudiar después sin cupo
+                CRUDOS.append({"voz": clave, "modelo": modelo, "via": via, "pausas": bool(tanda["pausas"]),
+                               "leyo_etiqueta": False, "rechazado": str(e)[:200], "indices": [i for i, _ in lote],
+                               "textos": [t for _, t in lote], "tramos": [], "resumen": f"rechazado: {e}"[:300],
+                               "wav": wav})
+                raise
             leida = bool(tanda["pausas"] and alinear.se_oye("long pause"))
             CRUDOS.append({"voz": clave, "modelo": modelo, "via": via, "pausas": bool(tanda["pausas"]),
                            "leyo_etiqueta": leida, "indices": [i for i, _ in lote], "textos": [t for _, t in lote],
