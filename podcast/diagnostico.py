@@ -382,6 +382,34 @@ def fricativas():
     nota("Fricativas", texto)
 
 
+def pausas():
+    """Cuánto silencio hay en los lotes guardados (CRUDO), en total y en cada corte entre frases.
+    Sirve para ver si un lote «demasiado largo» es voz lenta o pausas larguísimas. Sin cupo."""
+    import json
+    import os
+    import subprocess
+    import numpy as np
+    from . import alinear, dropbox
+    carpeta = os.environ.get("CRUDO") or "/Pruebas/Crudo de la prueba"
+    token = dropbox.token_acceso()
+    meta = json.loads(dropbox.descargar(token, f"{carpeta}/lotes.json").decode("utf-8"))
+    lineas = []
+    for lote in meta["lotes"]:
+        mp3 = dropbox.descargar(token, f"{carpeta}/{lote['fichero']}")
+        wav = subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-i", "pipe:0", "-ac", "1", "-ar", "24000",
+                              "-c:a", "pcm_s16le", "-f", "wav", "pipe:1"], input=mp3, capture_output=True, check=True).stdout
+        x = alinear.a_mono16k(wav)
+        sil, _ = alinear.silencios(alinear.envolvente_db(x), minimo_s=0.3)
+        dur = len(x) / alinear.SR
+        largos = [d for _, _, d in sil if d >= 0.8]
+        en_cortes = [next((d for s0, s1, d in sil if s0 - 0.05 <= b <= s1 + 0.05), 0.0) for _, b in lote["tramos"][:-1]]
+        lineas.append(f"{lote['fichero']} · voz {lote['voz']} · {len(lote['tramos'])} turnos · {dur:.0f}s · "
+                      f"silencio total {sum(d for _, _, d in sil):.0f}s · silencios de 0,8s o más: {len(largos)} "
+                      f"(máx {max(largos, default=0):.1f}s) · en los cortes: mediana "
+                      f"{float(np.median(en_cortes)) if en_cortes else 0:.1f}s, máx {max(en_cortes, default=0):.1f}s")
+    nota("Pausas", "\n".join(lineas))
+
+
 def _parecido(a, b):
     import difflib
     return difflib.SequenceMatcher(None, a, b).ratio() if a and b else 0.0
@@ -643,6 +671,6 @@ if __name__ == "__main__":
              "piper": piper, "vozlarga": vozlarga, "planes": planes, "busqueda": busqueda, "cortes": cortes,
              "muestras": muestras, "recortar": recortar, "timbre": timbre, "estado": estado,
              "fuentes_galicia": fuentes_galicia, "galicia": galicia, "pronuncia": pronuncia,
-             "fricativas": fricativas}[prueba]()
+             "fricativas": fricativas, "pausas": pausas}[prueba]()
         except Exception as e:
             nota(f"Diagnóstico {prueba}", traceback.format_exc()[-1500:], "warning")
