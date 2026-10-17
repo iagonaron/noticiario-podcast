@@ -66,7 +66,11 @@ Los registros de GitHub solo muestran datos técnicos.
 - **Cumpleaños**: edita `Cumpleaños.txt` en la carpeta del pódcast en Dropbox.
 - **Voces**: en Settings → Secrets and variables → Actions → *Variables*, crea `VOZ_A` /
   `VOZ_B` con el nombre de una voz de Gemini (ahora Kore y Algieba; otras: Aoede, Leda, Puck, Charon,
-  Charon, Orus, Achird, Sulafat) o `MOTOR_VOZ` = `edge` para usar solo las voces de Microsoft.
+  Orus, Achird, Sulafat) o `MOTOR_VOZ` = `edge` para usar solo las voces de Microsoft.
+- **Pronunciación**: a las voces se les escribe la x gallega como suena («Xunta» → «Shunta»,
+  Arteixo, Sanxenxo…; el guion escrito no cambia). Si dicen mal otra palabra, añádela a `PALABRAS`
+  en `podcast/pronuncia.py` escrita como tiene que sonar. Para oír cómo la dicen: flujo
+  «Diagnóstico» con `pruebas` = `pronuncia` (una petición por voz: mejor antes de las 9:00).
 
 ## Pausar, probar o deshacer
 

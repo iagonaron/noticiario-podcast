@@ -14,6 +14,10 @@
     gemini-3.6-flash (reserva del guion). El 16-oct quedó agotado tras describir 20 pistas: mejor
     pocas pistas, o antes de las 9:00.
 - Voces: Lucía = Kore, Martín = Algieba (la eligió Iago el 15-oct-2026 entre voces graves; antes Puck).
+- Pronunciación (17-oct-2026): las voces leían «Xunta» como «Yunta». `pronuncia.para_voz` les escribe la
+  x gallega como «sh» (Xunta → Shunta, Arteixo → Arteisho, Sanxenxo → Sanshensho; lista fija + reglas que
+  no tocan taxi, México, xilófono…); el guion escrito no cambia y `alinear.norma` cuenta «sh» = «x».
+  Prueba de oído: Diagnóstico `pronuncia` (1 petición por voz) → Dropbox /Pruebas/Pronunciación/.
 - Cortes: cada lote de voz se guarda tal cual en Dropbox (/Pruebas/Crudo del episodio, o «Crudo de la
   prueba»), con sus textos y cortes. Si Iago oye un corte mal hecho, el flujo «Diagnóstico» con
   `pruebas` = `recortar` (y `crudo` = esa carpeta) vuelve a cortar esos lotes sin gastar cupo y deja el

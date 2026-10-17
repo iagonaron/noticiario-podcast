@@ -9,6 +9,7 @@
     python -m podcast.diagnostico planes     → propuesta del momento Distinto Básico (va a Dropbox /Pruebas)
     python -m podcast.diagnostico pronuncia  → cómo dicen las voces la x gallega (1 petición por voz; MP3 en
                                                Dropbox /Pruebas/Pronunciación/)
+    python -m podcast.diagnostico fricativas → mide el «soplo» de la x en esos MP3 (sin gastar cupo)
 """
 import io
 import json
@@ -324,6 +325,63 @@ def pronuncia():
     nota("Pronunciación", "\n".join(informe))
 
 
+def fricativas():
+    """Mide, sin gastar cupo, cómo suena el «soplo» de cada palabra en los MP3 de «pronuncia»
+    (Whisper sitúa las palabras; luego se mira el espectro cada 10 ms). La frecuencia central del
+    soplo distingue los sonidos: «s» ≈ 5-6 kHz, «sh» ≈ 2,5-4 kHz, jota ≈ 1,5-2,5 kHz; la «y» de
+    «Yunta» es sonora y casi no tiene soplo. Así se compara la frase de antes con la de ahora."""
+    import subprocess
+    import numpy as np
+    from . import alinear, dropbox
+    token = dropbox.token_acceso()
+    m = alinear._modelo()
+    sr, n, hop = 16000, 512, 160
+    informe = ["Soplo de cada palabra (frecuencia central y duración). Referencia: s ≈ 5-6 kHz · "
+               "sh ≈ 2,5-4 kHz · jota ≈ 1,5-2,5 kHz · la «y» casi no tiene soplo.", ""]
+    for nombre_voz in ("Lucía", "Martín"):
+        mp3 = dropbox.descargar(token, f"/Pruebas/Pronunciación/{nombre_voz}.mp3")
+        if not mp3:
+            continue
+        pcm = subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-i", "pipe:0", "-f", "s16le",
+                              "-ac", "1", "-ar", str(sr), "pipe:1"], input=mp3, capture_output=True, check=True).stdout
+        x = np.frombuffer(pcm, np.int16).astype(np.float32) / 32768.0
+        segs, _ = m.transcribe(x, language="es", word_timestamps=True, beam_size=1, vad_filter=False,
+                               condition_on_previous_text=False)
+        frases = [[(w.word.strip(), w.start, w.end) for w in (sg.words or [])] for sg in segs]
+        tramas = np.lib.stride_tricks.sliding_window_view(np.pad(x, (n // 2, n // 2)), n)[::hop] * np.hanning(n)
+        P = np.abs(np.fft.rfft(tramas, axis=1)) ** 2
+        f = np.fft.rfftfreq(n, 1 / sr)
+        total = P.sum(1) + 1e-12
+        db = 10 * np.log10(total)
+        soplo = ((P[:, f >= 2000].sum(1) / total > 0.5) & (P[:, f < 1000].sum(1) / total < 0.2)
+                 & (db > np.percentile(db, 95) - 40))
+        banda = (f >= 1500) & (f <= 7800)
+        centro = (P[:, banda] * f[banda]).sum(1) / (P[:, banda].sum(1) + 1e-12)
+        informe.append(f"{nombre_voz}:")
+        for frase in frases:
+            linea = []
+            for palabra, a, b in frase:
+                i0, i1 = int(max(0.0, a - 0.08) * 100), min(int((b + 0.05) * 100), len(soplo))
+                tramos, k = [], i0
+                while k < i1:
+                    if soplo[k]:
+                        j = k
+                        while j < i1 and soplo[j]:
+                            j += 1
+                        if j - k >= 3:
+                            tramos.append(f"{np.median(centro[k:j]) / 1000:.1f}k/{(j - k) * 10}ms")
+                        k = j
+                    else:
+                        k += 1
+                linea.append(f"{palabra} [{' '.join(tramos)}]" if tramos else palabra)
+            if linea:
+                informe.append("  " + " ".join(linea))
+        informe.append("")
+    texto = "\n".join(informe)
+    dropbox.subir(token, "/Pruebas/Pronunciación/soplo.txt", texto.encode("utf-8"))
+    nota("Fricativas", texto)
+
+
 def _parecido(a, b):
     import difflib
     return difflib.SequenceMatcher(None, a, b).ratio() if a and b else 0.0
@@ -584,6 +642,7 @@ if __name__ == "__main__":
             {"elpais": elpais, "noticias": noticias, "voz": voz, "guion": guion, "edge": edge,
              "piper": piper, "vozlarga": vozlarga, "planes": planes, "busqueda": busqueda, "cortes": cortes,
              "muestras": muestras, "recortar": recortar, "timbre": timbre, "estado": estado,
-             "fuentes_galicia": fuentes_galicia, "galicia": galicia, "pronuncia": pronuncia}[prueba]()
+             "fuentes_galicia": fuentes_galicia, "galicia": galicia, "pronuncia": pronuncia,
+             "fricativas": fricativas}[prueba]()
         except Exception as e:
             nota(f"Diagnóstico {prueba}", traceback.format_exc()[-1500:], "warning")

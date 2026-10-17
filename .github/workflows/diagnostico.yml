@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
     inputs:
       pruebas:
-        description: "Pruebas separadas por espacios: elpais noticias voz edge piper vozlarga guion planes cortes muestras pronuncia"
+        description: "Pruebas separadas por espacios: elpais noticias voz edge piper vozlarga guion planes cortes muestras pronuncia fricativas"
         required: false
         default: "voz"
         type: string
