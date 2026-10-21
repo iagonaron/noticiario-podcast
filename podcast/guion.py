@@ -414,7 +414,7 @@ def escribir_distinto(plan, primera, numero):
                     "nada nuevo, pero ojo, que sigue en pie…») y céntrate en cuándo es y si hay que reservar. "
                     "El «cuando» ya viene dicho respecto a hoy: úsalo tal cual.")
     datos = {k: v for k, v in plan.items() if k not in ("fuentes", "fuente", "modelo", "lectura", "recordatorio",
-                                                         "recordado", "propuesto")}
+                                                         "recordado", "propuesto", "segundos")}
     usuario = "PROPUESTA (JSON):\n" + json.dumps(datos, ensure_ascii=False)
     avisos = []
     for modelo in config.MODELOS_TEXTO[:3]:

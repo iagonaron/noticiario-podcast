@@ -242,6 +242,7 @@ def main():
         if plan:
             avisos.append(f"Distinto Básico: sin plan nuevo; se recuerda el propuesto el {plan.get('propuesto')}")
     diag.append(f"Distinto Básico: {'propuesta de ' + plan.get('modelo', '?') if plan else 'sin propuesta'}"
+                + (f" en {plan['segundos']} s" if plan and plan.get("segundos") else "")
                 + (f" · páginas: {plan.get('lectura')}" if plan and plan.get("lectura") else ""))
     if plan:
         numero = max([s.get("noticia") or 0 for s in segs_ia] + [0]) + 1

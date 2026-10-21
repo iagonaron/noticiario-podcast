@@ -131,10 +131,11 @@ def planes():
     hist = dropbox.descargar(token, config.DROPBOX_PLANES_HISTORIAL)
     historial = [l for l in (hist.decode("utf-8-sig", "replace").splitlines() if hist else []) if l.strip()]
     t0 = time.time()
-    plan, avisos = pl.proponer(util.ahora().date(), criterios, historial)
+    plan, avisos = pl.proponer(util.ahora().date(), criterios, historial,
+                               limite=time.time() + config.PLAN_ESPERA_MAX - 15)   # como en el episodio
     if plan:
         dropbox.subir(token, "/Pruebas/plan de prueba.json", json.dumps(plan, ensure_ascii=False, indent=1).encode("utf-8-sig"))
-    nota("Distinto Básico", f"{time.time() - t0:.0f}s · {'propuesta OK' if plan else 'sin propuesta'} · "
+    nota("Distinto Básico", f"{time.time() - t0:.0f}s · {'propuesta OK en ' + str(plan.get('segundos')) + ' s' if plan else 'sin propuesta'} · "
                             f"modelo {plan.get('modelo') if plan else '-'} · fuentes {len(plan.get('fuentes', [])) if plan else 0} · "
                             f"criterios {'de Dropbox' if crit else 'genéricos'} · páginas: {plan.get('lectura') if plan else '-'} · "
                             f"fecha propuesta {plan.get('dia') if plan else '-'} · avisos: {avisos}"[:3000])

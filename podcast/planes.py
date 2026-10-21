@@ -17,6 +17,9 @@ import requests
 from . import config, util
 
 URL = "https://generativelanguage.googleapis.com/v1beta/models/{modelo}:generateContent"
+# lo más que se espera una respuesta: leer cinco agendas y pensar lleva de uno a cuatro minutos
+# (el 21-oct-2026, con 150 s, dos peticiones seguidas se cortaron antes de responder)
+ESPERA_PETICION = int(os.environ.get("PLAN_ESPERA_PETICION") or 240)
 PROHIBIDO = re.compile(r"acuario|aquarium|zoo\b|zool[oó]gico|delf[ií]n|granja[- ]escuela|circo con animales|"
                        r"doma|rodeo|corrida|tauri", re.I)
 
@@ -181,7 +184,7 @@ def proponer(hoy, criterios, historial, limite=None):
                 return None, avisos
             t0 = time.time()
             try:
-                r = requests.post(URL.format(modelo=modelo), timeout=min(150, queda - 5),
+                r = requests.post(URL.format(modelo=modelo), timeout=min(ESPERA_PETICION, queda - 5),
                                   headers={"x-goog-api-key": os.environ["GEMINI_API_KEY"], "Content-Type": "application/json"},
                                   json={"contents": [{"role": "user", "parts": [{"text": pregunta}]}],
                                         "tools": [{"url_context": {}}],
@@ -209,10 +212,11 @@ def proponer(hoy, criterios, historial, limite=None):
                 plan["fuentes"] = [u for u, est in leidas if "SUCCESS" in est.upper()]
                 plan["modelo"] = modelo
                 plan["lectura"] = ", ".join(f"{u.split('/')[2] if '//' in u else u}: {est.lower()}" for u, est in leidas)
+                plan["segundos"] = round(time.time() - t0)
                 util.log(f"Distinto Básico: {modelo} en {time.time() - t0:.0f}s · páginas: {plan['lectura']}")
                 return plan, avisos
             except Exception as e:
-                avisos.append(f"Distinto Básico · {modelo}: {str(e)[:200]}")
+                avisos.append(f"Distinto Básico · {modelo} ({time.time() - t0:.0f} s): {str(e)[:200]}")
                 util.log(avisos[-1])
                 if "HTTP 429" in str(e) or "HTTP 5" in str(e):
                     time.sleep(10)
@@ -221,7 +225,7 @@ def proponer(hoy, criterios, historial, limite=None):
 
 def para_guardar(hoy, plan):
     """La propuesta tal cual, para poder recordarla otro día si ese día no sale ninguna."""
-    return dict({k: v for k, v in plan.items() if k not in ("fuentes", "lectura", "recordatorio")},
+    return dict({k: v for k, v in plan.items() if k not in ("fuentes", "lectura", "recordatorio", "segundos")},
                 propuesto=hoy.isoformat())
 
 
