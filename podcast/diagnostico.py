@@ -11,6 +11,7 @@
                                                Dropbox /Pruebas/Pronunciación/)
     python -m podcast.diagnostico fricativas → mide el «soplo» de la x en esos MP3 (sin gastar cupo)
     python -m podcast.diagnostico pausas     → cuánto silencio traen los lotes guardados (CRUDO; sin cupo)
+    python -m podcast.diagnostico historia   → recupera el Diagnóstico y el guion de otro día (FECHA; sin cupo)
 """
 import io
 import json
@@ -411,6 +412,37 @@ def pausas():
     nota("Pausas", "\n".join(lineas))
 
 
+def historia():
+    """Recupera de Dropbox la versión de otro día (FECHA, por defecto ayer) de «Diagnóstico.txt» y de
+    «Guion de hoy.md», que cada episodio sobrescribe, y la deja en /Pruebas/Historia/. Aquí solo se
+    anotan horas y tamaños (el contenido puede ser personal). Sin cupo."""
+    import datetime as dt
+    import os
+    from zoneinfo import ZoneInfo
+    from . import config, dropbox, util
+    fecha = (os.environ.get("FECHA") or "").strip() or (util.ahora().date() - dt.timedelta(days=1)).isoformat()
+    token = dropbox.token_acceso()
+    madrid = ZoneInfo(config.ZONA)
+
+    def cuando(r):
+        return dt.datetime.fromisoformat(r["server_modified"].replace("Z", "+00:00")).astimezone(madrid)
+
+    for ruta in (config.DROPBOX_DIAGNOSTICO, config.DROPBOX_GUION):
+        del_dia = sorted((r for r in dropbox.revisiones(token, ruta) if cuando(r).date().isoformat() == fecha),
+                         key=cuando)
+        if not del_dia:
+            nota("Historia", f"{ruta}: no hay ninguna versión del {fecha}", "warning")
+            continue
+        r = del_dia[-1]
+        datos = dropbox.descargar(token, "rev:" + r["rev"])
+        base, ext = ruta.strip("/").rsplit(".", 1)
+        destino = f"/Pruebas/Historia/{base.split('/')[-1]} del {fecha}.{ext}"
+        dropbox.subir(token, destino, datos)
+        nota("Historia", f"{ruta} del {fecha}: {len(del_dia)} versiones ese día "
+                         f"({', '.join(f'{cuando(x):%H:%M}' for x in del_dia)}); la de las {cuando(r):%H:%M} "
+                         f"({len(datos)} bytes) → {destino}")
+
+
 def _parecido(a, b):
     import difflib
     return difflib.SequenceMatcher(None, a, b).ratio() if a and b else 0.0
@@ -672,6 +704,7 @@ if __name__ == "__main__":
              "piper": piper, "vozlarga": vozlarga, "planes": planes, "busqueda": busqueda, "cortes": cortes,
              "muestras": muestras, "recortar": recortar, "timbre": timbre, "estado": estado,
              "fuentes_galicia": fuentes_galicia, "galicia": galicia, "pronuncia": pronuncia,
-             "fricativas": fricativas, "pausas": pausas}[prueba]()
+             "fricativas": fricativas, "pausas": pausas,
+             "historia": historia}[prueba]()
         except Exception as e:
             nota(f"Diagnóstico {prueba}", traceback.format_exc()[-1500:], "warning")

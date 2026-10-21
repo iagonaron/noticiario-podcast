@@ -116,6 +116,19 @@ def listar(token, carpeta):
     return json.loads(cuerpo).get("entries", [])
 
 
+def revisiones(token, ruta, limite=30):
+    """Versiones anteriores de un fichero (Dropbox guarda su historial): [{rev, server_modified, size…}].
+    Una versión se descarga con descargar(token, "rev:" + rev)."""
+    st, cuerpo = _peticion("https://api.dropboxapi.com/2/files/list_revisions",
+                           json.dumps({"path": ruta, "mode": "path", "limit": limite}).encode(),
+                           {"Authorization": f"Bearer {token}", "Content-Type": "application/json"})
+    if st == 409:
+        return []
+    if st != 200:
+        raise ErrorDropbox(f"list_revisions {ruta} ({st}): {cuerpo[:200]!r}")
+    return json.loads(cuerpo).get("entries", [])
+
+
 def descargar(token, ruta):
     st, cuerpo = _peticion("https://content.dropboxapi.com/2/files/download", b"",
                            {"Authorization": f"Bearer {token}",

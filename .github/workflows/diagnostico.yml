@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
     inputs:
       pruebas:
-        description: "Pruebas separadas por espacios: elpais noticias voz edge piper vozlarga guion planes cortes muestras pronuncia fricativas pausas recortar timbre"
+        description: "Pruebas separadas por espacios: elpais noticias voz edge piper vozlarga guion planes cortes muestras pronuncia fricativas pausas recortar timbre historia"
         required: false
         default: "voz"
         type: string
@@ -27,6 +27,10 @@ on:
         description: "Para «recortar»: carpeta de Dropbox con los lotes guardados (vacío = /Pruebas/Crudo de la prueba)"
         required: false
         type: string
+      fecha:
+        description: "Para «historia»: día a recuperar, AAAA-MM-DD (vacío = ayer)"
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -43,6 +47,7 @@ jobs:
       PRUEBAS: ${{ inputs.pruebas }}
       MODELOS_VOZ: ${{ inputs.modelos_voz }}
       CRUDO: ${{ inputs.crudo }}
+      FECHA: ${{ inputs.fecha }}
       SIN_ETIQUETA: ${{ inputs.sin_etiqueta }}
       CORTES_VIEJOS: ${{ inputs.cortes_viejos == 'si' && '1' || '' }}
     steps:
