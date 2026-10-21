@@ -523,6 +523,24 @@ def planes_tiempos():
     nota("Tiempos del plan", "\n".join(f"{k}: {v}" for k, v in res.items()))
 
 
+def agenda_caracteres():
+    """Los títulos de la agenda de hoy y mañana con los caracteres raros a la vista (U+XXXX), a Dropbox
+    /Pruebas/Agenda - caracteres.txt (privado). Aquí solo cuántos hay. Sin cupo."""
+    import unicodedata
+    from . import agenda, dropbox, util
+    eventos, problemas = agenda.obtener(util.ahora().date())
+    filas, raros = [], 0
+    for dia in ("hoy", "manana"):
+        for e in eventos.get(dia, []):
+            t = e["titulo"]
+            marcado = "".join(c if (c.isalnum() or c in " .,:;-()¿?¡!'\"/") and ord(c) < 0x2000
+                              else f"[U+{ord(c):04X} {unicodedata.name(c, '?')}]" for c in t)
+            raros += marcado != t
+            filas.append(f"{dia} · {marcado}  →  se lee: {agenda._titulo(e)}")
+    dropbox.subir(dropbox.token_acceso(), "/Pruebas/Agenda - caracteres.txt", "\n".join(filas).encode("utf-8"))
+    nota("Agenda", f"{len(filas)} títulos, {raros} con caracteres raros · problemas: {len(problemas)}")
+
+
 def _parecido(a, b):
     import difflib
     return difflib.SequenceMatcher(None, a, b).ratio() if a and b else 0.0
@@ -785,6 +803,7 @@ if __name__ == "__main__":
              "muestras": muestras, "recortar": recortar, "timbre": timbre, "estado": estado,
              "fuentes_galicia": fuentes_galicia, "galicia": galicia, "pronuncia": pronuncia,
              "fricativas": fricativas, "pausas": pausas,
-             "historia": historia, "tiempo": tiempo, "planes_tiempos": planes_tiempos}[prueba]()
+             "historia": historia, "tiempo": tiempo, "planes_tiempos": planes_tiempos,
+             "agenda_caracteres": agenda_caracteres}[prueba]()
         except Exception as e:
             nota(f"Diagnóstico {prueba}", traceback.format_exc()[-1500:], "warning")
