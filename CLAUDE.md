@@ -51,9 +51,12 @@
   ninguna agenda (3-flash-preview lo hacía). Si no hay plan nuevo, se recuerda uno de otro día que siga en pie
   (`planes.recordatorio`, desde /Distinto Básico - propuestas.json). Diagnósticos: `planes`, `planes_tiempos`
   (`modelos_texto`), `historia` (Diagnóstico y guion de otro día, desde el historial de Dropbox; `fecha`).
-- Emojis (21-oct-2026): `util.sin_emojis` deja un espacio en su sitio y lee las flechas como «a». Ojo: el
-  «9.3013.30» y «Ferrer1430» de la agenda de ese día venían así escritos en el calendario (diagnóstico
-  `agenda_caracteres`, a Dropbox /Pruebas): se leen tal cual.
+- Emojis (21-oct-2026): `util.sin_emojis` deja un espacio en su sitio y lee las flechas como «a».
+- Horas (21-oct-2026, lo pidió Iago): en los títulos de la agenda, «9.3013.30» → «9:30 a 13:30» y
+  «Ferrer1430» → «Ferrer 14:30» (`agenda._horas`; así los escribe él en el calendario), y la voz dice toda
+  hora «13:30» con números, tal cual: «trece treinta», «catorce en punto» (`pronuncia.para_voz`), para no
+  dudar de qué hora es. Las horas de los eventos siguen «a las nueve de la noche». Ver los títulos tal cual
+  y cómo se leen: diagnóstico `agenda_caracteres` (a Dropbox /Pruebas, privado).
 - Música: el flujo «Preparar música» (modos listar, describir, muestras, fondo) prepara candidatas;
   `muestras` monta un trozo de programa real con cada una en Dropbox /Pruebas/Músicas para elegir/.
   Antes de `fondo`, guarda una copia de /musica/fondo.mp3 (se sobrescribe).

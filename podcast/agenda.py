@@ -17,6 +17,20 @@ from . import util
 
 RE_HORA_TITULO = re.compile(r"(?:\b|^)(\d{1,2})\s*(?:[:.]\s*(\d{2}))?\s*h\b", re.I)
 
+# Horas escritas a mano en los títulos: «9.3013.30» o «9.30-13.30» → «9:30 a 13:30», «Ferrer1430» → «Ferrer 14:30»,
+# «9.30» → «9:30». Luego la voz las dice con números, tal cual («trece treinta»): así lo quiere Iago (21-oct-2026),
+# para no tener dudas de qué hora es (ver pronuncia.py).
+_H, _M = r"([01]?\d|2[0-3])", r"([0-5]\d)"
+RE_DOS_HORAS = re.compile(rf"(?<![\d.:]){_H}[.:]{_M}\s*(?:[-–—/]|\ba\b)?\s*{_H}[.:]{_M}(?![\d.:])")
+RE_HORA_PEGADA = re.compile(rf"(?<=[^\W\d_]){_H}{_M}\b")
+RE_UNA_HORA = re.compile(rf"(?<![\d.:]){_H}[.:]{_M}(?![\d.:])")
+
+
+def _horas(t):
+    t = RE_DOS_HORAS.sub(lambda m: f"{int(m[1])}:{m[2]} a {int(m[3])}:{m[4]}", t)
+    t = RE_HORA_PEGADA.sub(lambda m: f" {int(m[1])}:{m[2]}", t)
+    return RE_UNA_HORA.sub(lambda m: f"{int(m[1])}:{m[2]}", t)
+
 
 def _urls():
     urls = []
@@ -95,6 +109,7 @@ def _titulo(e):
     t = util.sin_emojis(e["titulo"])
     if e["min"] is not None:
         t = RE_HORA_TITULO.sub("", t, count=1).strip(" -–·:")
+    t = _horas(t)
     t = re.sub(r"\(\s*sin hora\s*\)", ", aún sin hora", t, flags=re.I)
     if "madrid" in t.lower():
         t = re.sub(r"\s*[—–-]\s*", " contra ", t, count=1)

@@ -685,7 +685,7 @@ def sintetizar(segmentos, carpeta):
     anota(f"{len(segmentos)} turnos · {sum(len(s['texto']) for s in segmentos)} caracteres")
     cambiadas = sum(pronuncia.cuantas(util.sin_emojis(s["texto"])) for s in segmentos)
     if cambiadas:                            # solo la cifra: el registro no lleva nada del texto
-        anota(f"Pronunciación: {cambiadas} palabras escritas como suenan para la voz (x gallega)")
+        anota(f"Pronunciación: {cambiadas} palabras u horas escritas como suenan para la voz (x gallega, 13:30…)")
     try:
         wavs, motores, avisos = sintetizar_por_voces(segmentos, carpeta)
         piezas = []
