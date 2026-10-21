@@ -9,7 +9,9 @@ propuesto se apunta en «Distinto Básico - propuestas.txt» para no repetir.
 import datetime as dt
 import json
 import os
+import queue
 import re
+import threading
 import time
 
 import requests
@@ -20,6 +22,9 @@ URL = "https://generativelanguage.googleapis.com/v1beta/models/{modelo}:generate
 # lo más que se espera una respuesta: leer cinco agendas y pensar lleva de uno a cuatro minutos
 # (el 21-oct-2026, con 150 s, dos peticiones seguidas se cortaron antes de responder)
 ESPERA_PETICION = int(os.environ.get("PLAN_ESPERA_PETICION") or 240)
+ESPERA_RELEVO = 100          # si en este tiempo no ha contestado, se pide también al siguiente modelo
+RESPIRO = 10                 # tras un «saturado» (503) o «demasiadas peticiones» (429), antes de la siguiente
+MINIMO = 45                  # con menos tiempo que esto por delante ya no se lanza otra petición
 PROHIBIDO = re.compile(r"acuario|aquarium|zoo\b|zool[oó]gico|delf[ií]n|granja[- ]escuela|circo con animales|"
                        r"doma|rodeo|corrida|tauri", re.I)
 
@@ -166,60 +171,98 @@ def _en_lista(nombre, criterios):
     return len(n) >= 4 and n[:20] in util.sin_tildes(criterios or "").lower()
 
 
+def _una(modelo, pregunta, hoy, criterios, historial, espera):
+    """Una petición a un modelo: devuelve (plan, avisos) o lanza una excepción."""
+    t0 = time.time()
+    r = requests.post(URL.format(modelo=modelo), timeout=espera,
+                      headers={"x-goog-api-key": os.environ["GEMINI_API_KEY"], "Content-Type": "application/json"},
+                      json={"contents": [{"role": "user", "parts": [{"text": pregunta}]}],
+                            "tools": [{"url_context": {}}],
+                            "generationConfig": {"temperature": 0.8}})
+    if r.status_code != 200:
+        m = re.search(r'"message"\s*:\s*"([^"]{0,160})', r.text)
+        raise RuntimeError(f"HTTP {r.status_code}: {m.group(1) if m else r.text[:160]}")
+    j = r.json()
+    plan, descartes, avisos = None, [], []
+    for opcion in _opciones(_texto_respuesta(j))[:3]:
+        motivo = _valido(opcion, hoy, historial)
+        if not motivo:
+            plan = opcion
+            break
+        descartes.append(motivo)
+    if not plan:
+        raise RuntimeError(f"propuestas descartadas ({'; '.join(descartes) or 'ninguna'})")
+    if descartes:
+        avisos.append(f"Distinto Básico: antes de la elegida se descartaron {len(descartes)} ({'; '.join(descartes)})")
+    comer = plan.get("comer") if isinstance(plan.get("comer"), dict) else None
+    if comer and not _en_lista(comer.get("nombre", ""), criterios):
+        avisos.append("Distinto Básico: el sitio de comer propuesto no estaba en la lista; se omite")
+        plan["comer"] = None
+    leidas = _leidas(j)
+    plan["fuentes"] = [u for u, est in leidas if "SUCCESS" in est.upper()]
+    if not plan["fuentes"]:
+        # sin haber leído ninguna agenda, la fecha, la hora o el sitio pueden ser inventados
+        # (el 21-oct-2026 gemini-3-flash-preview propuso sin abrir ninguna página)
+        raise RuntimeError("no leyó ninguna agenda: la propuesta podría ser inventada")
+    plan["modelo"] = modelo
+    plan["lectura"] = ", ".join(f"{u.split('/')[2] if '//' in u else u}: {est.lower()}" for u, est in leidas)
+    plan["segundos"] = round(time.time() - t0)
+    util.log(f"Distinto Básico: {modelo} en {plan['segundos']}s · páginas: {plan['lectura']}")
+    return plan, avisos
+
+
 def proponer(hoy, criterios, historial, limite=None):
     """Devuelve (plan o None, avisos). El plan es un diccionario listo para el guionista.
-    `limite`: hora (time.time()) a la que tiene que haber terminado; cada petición espera como mucho
-    lo que quede (el 20-oct-2026 una petición colgada se comió 200 s y el día se quedó sin plan)."""
+
+    Cuando Gemini está saturado, una petición puede tardar cuatro minutos en contestar que no puede
+    (el 20 y el 21-oct-2026). Por eso: si un modelo no ha contestado en ESPERA_RELEVO segundos, se
+    lanza a la vez el siguiente de la lista y vale la primera propuesta buena que llegue; si uno
+    falla, el siguiente sale enseguida. Hay dos vueltas a la lista y nada pasa de `limite`."""
     avisos = []
     if not criterios or not os.environ.get("GEMINI_API_KEY"):
         return None, ["Distinto Básico: faltan los criterios o la clave de Gemini"]
-    urls = fuentes_del_dia(hoy)
-    pregunta = _pregunta(hoy, criterios, historial, urls)
+    pregunta = _pregunta(hoy, criterios, historial, fuentes_del_dia(hoy))
     limite = limite or (time.time() + 330)
-    for modelo in config.MODELOS_PLANES:
-        for intento in range(2):
-            queda = limite - time.time()
-            if queda < 45:
-                avisos.append("Distinto Básico: se acabó el tiempo para buscar el plan")
-                return None, avisos
-            t0 = time.time()
-            try:
-                r = requests.post(URL.format(modelo=modelo), timeout=min(ESPERA_PETICION, queda - 5),
-                                  headers={"x-goog-api-key": os.environ["GEMINI_API_KEY"], "Content-Type": "application/json"},
-                                  json={"contents": [{"role": "user", "parts": [{"text": pregunta}]}],
-                                        "tools": [{"url_context": {}}],
-                                        "generationConfig": {"temperature": 0.8}})
-                if r.status_code != 200:
-                    m = re.search(r'"message"\s*:\s*"([^"]{0,160})', r.text)
-                    raise RuntimeError(f"HTTP {r.status_code}: {m.group(1) if m else r.text[:160]}")
-                j = r.json()
-                plan, descartes = None, []
-                for opcion in _opciones(_texto_respuesta(j))[:3]:
-                    motivo = _valido(opcion, hoy, historial)
-                    if not motivo:
-                        plan = opcion
-                        break
-                    descartes.append(motivo)
-                if not plan:
-                    raise RuntimeError(f"propuestas descartadas ({'; '.join(descartes) or 'ninguna'})")
-                if descartes:
-                    avisos.append(f"Distinto Básico: antes de la elegida se descartaron {len(descartes)} ({'; '.join(descartes)})")
-                comer = plan.get("comer") if isinstance(plan.get("comer"), dict) else None
-                if comer and not _en_lista(comer.get("nombre", ""), criterios):
-                    avisos.append(f"Distinto Básico: el sitio de comer propuesto no estaba en la lista; se omite")
-                    plan["comer"] = None
-                leidas = _leidas(j)
-                plan["fuentes"] = [u for u, est in leidas if "SUCCESS" in est.upper()]
-                plan["modelo"] = modelo
-                plan["lectura"] = ", ".join(f"{u.split('/')[2] if '//' in u else u}: {est.lower()}" for u, est in leidas)
-                plan["segundos"] = round(time.time() - t0)
-                util.log(f"Distinto Básico: {modelo} en {time.time() - t0:.0f}s · páginas: {plan['lectura']}")
-                return plan, avisos
-            except Exception as e:
-                avisos.append(f"Distinto Básico · {modelo} ({time.time() - t0:.0f} s): {str(e)[:200]}")
-                util.log(avisos[-1])
-                if "HTTP 429" in str(e) or "HTTP 5" in str(e):
-                    time.sleep(10)
+    cola = queue.Queue()
+    turno = list(config.MODELOS_PLANES) * 2          # la saturación suele ser pasajera: segunda vuelta
+    en_marcha, proximo = 0, 0.0
+
+    def pedir(modelo, espera):
+        t0 = time.time()
+        try:
+            plan, av = _una(modelo, pregunta, hoy, criterios, historial, espera)
+            cola.put((modelo, plan, av, None, time.time() - t0))
+        except Exception as e:
+            cola.put((modelo, None, [], e, time.time() - t0))
+
+    while True:
+        ahora = time.time()
+        queda = limite - ahora
+        if turno and queda >= MINIMO and ahora >= proximo:
+            modelo = turno.pop(0)
+            threading.Thread(target=pedir, args=(modelo, max(5, min(ESPERA_PETICION, queda - 5))), daemon=True).start()
+            en_marcha += 1
+            proximo = ahora + ESPERA_RELEVO
+        if en_marcha == 0 and (not turno or queda < MINIMO):
+            break
+        if queda <= 0:
+            break
+        espera = min(5.0, queda)
+        if turno:                                        # sin pasarse de la hora del relevo
+            espera = min(espera, proximo - time.time())
+        try:
+            modelo, plan, av, error, seg = cola.get(timeout=max(0.2, espera))
+        except queue.Empty:
+            continue
+        en_marcha -= 1
+        if plan:
+            return plan, avisos + av
+        avisos.append(f"Distinto Básico · {modelo} ({seg:.0f} s): {str(error)[:200]}")
+        util.log(avisos[-1])
+        espera = RESPIRO if ("HTTP 429" in str(error) or "HTTP 5" in str(error)) else 0
+        proximo = min(proximo, time.time() + espera)     # tras un fallo, el siguiente casi enseguida
+    avisos.append("Distinto Básico: se acabó el tiempo para buscar el plan" if time.time() >= limite - MINIMO
+                  else "Distinto Básico: ningún modelo dio una propuesta válida")
     return None, avisos
 
 

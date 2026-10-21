@@ -48,9 +48,11 @@ MEDIOS_NOTICIA_GORDA = 6     # si una noticia de Galicia la cuentan tantos medio
 PRUEBA = (os.environ.get("PRUEBA") or "").lower() in ("si", "sí", "true", "1")
 
 # Momento Distinto Básico: modelos que leen las agendas (herramienta url_context, gratuita)
+# (21-oct-2026: con Gemini saturado, 3.8 y 3.6 tardaban cuatro minutos en decir que no; el «lite» respondía en
+# segundos leyendo las agendas. 3-flash-preview contestó sin abrir ninguna página: va el último)
 MODELOS_PLANES = [m.strip() for m in (os.environ.get("MODELOS_PLANES") or (
-    "gemini-3.6-flash,gemini-3-flash-preview" if PRUEBA else
-    "gemini-3.8-flash,gemini-3.6-flash,gemini-3-flash-preview")).split(",") if m.strip()]
+    "gemini-3.6-flash,gemini-3.5-flash-lite,gemini-3-flash-preview" if PRUEBA else
+    "gemini-3.8-flash,gemini-3.6-flash,gemini-3.5-flash-lite,gemini-3-flash-preview")).split(",") if m.strip()]
 TEXTO_MAX_NOTICIA = 1800     # caracteres de cada noticia que se le pasan al guionista
 
 MODELOS_TEXTO = [m.strip() for m in (os.environ.get("MODELOS_TEXTO") or (

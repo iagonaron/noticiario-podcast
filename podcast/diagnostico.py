@@ -503,8 +503,9 @@ def planes_tiempos():
             u = j.get("usageMetadata") or {}
             try:
                 ops = pl._opciones(pl._texto_respuesta(j))
-                validas = [o for o in ops if not pl._valido(dict(o), hoy, historial)]
-                cuantas = f"{len(ops)} opciones, {len(validas)} válidas"
+                motivos = [pl._valido(dict(o), hoy, historial) for o in ops]
+                cuantas = (f"{len(ops)} opciones, {sum(1 for m in motivos if not m)} válidas"
+                           + (f" (descartadas: {'; '.join(m for m in motivos if m)})" if any(motivos) else ""))
             except Exception as e:
                 cuantas = f"sin JSON ({type(e).__name__})"
             res[nombre] = (f"{seg:.0f} s · {cuantas} · fichas: pregunta {u.get('promptTokenCount')}, páginas "
