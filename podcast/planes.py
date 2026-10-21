@@ -62,6 +62,14 @@ def _json_de(texto):
     return json.loads(m.group(0))
 
 
+def _opciones(texto):
+    """Las propuestas de la respuesta, en orden: {"opciones": [...]} o, si viene una sola, [esa]."""
+    j = _json_de(texto)
+    if isinstance(j, dict) and isinstance(j.get("opciones"), list):
+        return [o for o in j["opciones"] if isinstance(o, dict)]
+    return [j]
+
+
 def _pregunta(hoy, criterios, historial, urls):
     fecha = util.fecha_larga(dt.datetime.combine(hoy, dt.time(8)))
     desde, hasta = hoy + dt.timedelta(days=2), hoy + dt.timedelta(days=9)
@@ -70,7 +78,7 @@ def _pregunta(hoy, criterios, historial, urls):
     return f"""Hoy es {fecha} de {hoy.year}. Lee estas agendas de A Coruña y alrededores:
 {agendas}
 
-y elige UNA propuesta de plan para hoy o para los próximos días, siguiendo estos criterios de Iago para su «Distinto Básico» (planes en pareja con Laura):
+y elige TRES propuestas de plan para hoy o para los próximos días (tres eventos distintos, en sitios distintos), ordenadas de la que más te convence a la que menos, siguiendo estos criterios de Iago para su «Distinto Básico» (planes en pareja con Laura):
 
 {criterios}
 
@@ -82,7 +90,7 @@ CÓMO ELEGIR
 - Usa SOLO lo que digan esas páginas para la fecha, la hora, el lugar, el precio y si hay que reservar. Si un dato no viene, pon null: no lo inventes. Antes algo sencillo y seguro que algo dudoso.
 - Para comer: SOLO uno de la lista de sitios que viene en los criterios (copia su nombre tal cual), el que esté más cerca del lugar de la actividad; di qué tiene vegano según la lista. Nunca te inventes un sitio: si no hay lista, pon "comer": null.
 
-Responde SOLO con un objeto JSON, sin texto antes ni después, con estas claves:
+Responde SOLO con un objeto JSON, sin texto antes ni después: {{"opciones": [propuesta 1, propuesta 2, propuesta 3]}}, y cada propuesta con estas claves:
 {{"titulo": "nombre del plan",
  "que_es": "dos o tres frases: qué es, quién lo organiza y qué te encuentras",
  "por_que": "una frase: por qué les puede gustar a Iago y a Laura",
@@ -155,22 +163,25 @@ def _en_lista(nombre, criterios):
     return len(n) >= 4 and n[:20] in util.sin_tildes(criterios or "").lower()
 
 
-def proponer(hoy, criterios, historial):
-    """Devuelve (plan o None, avisos). El plan es un diccionario listo para el guionista."""
+def proponer(hoy, criterios, historial, limite=None):
+    """Devuelve (plan o None, avisos). El plan es un diccionario listo para el guionista.
+    `limite`: hora (time.time()) a la que tiene que haber terminado; cada petición espera como mucho
+    lo que quede (el 20-oct-2026 una petición colgada se comió 200 s y el día se quedó sin plan)."""
     avisos = []
     if not criterios or not os.environ.get("GEMINI_API_KEY"):
         return None, ["Distinto Básico: faltan los criterios o la clave de Gemini"]
     urls = fuentes_del_dia(hoy)
     pregunta = _pregunta(hoy, criterios, historial, urls)
-    inicio = time.time()
+    limite = limite or (time.time() + 330)
     for modelo in config.MODELOS_PLANES:
         for intento in range(2):
-            if time.time() - inicio > 330:
+            queda = limite - time.time()
+            if queda < 45:
                 avisos.append("Distinto Básico: se acabó el tiempo para buscar el plan")
                 return None, avisos
             t0 = time.time()
             try:
-                r = requests.post(URL.format(modelo=modelo), timeout=200,
+                r = requests.post(URL.format(modelo=modelo), timeout=min(150, queda - 5),
                                   headers={"x-goog-api-key": os.environ["GEMINI_API_KEY"], "Content-Type": "application/json"},
                                   json={"contents": [{"role": "user", "parts": [{"text": pregunta}]}],
                                         "tools": [{"url_context": {}}],
@@ -179,10 +190,17 @@ def proponer(hoy, criterios, historial):
                     m = re.search(r'"message"\s*:\s*"([^"]{0,160})', r.text)
                     raise RuntimeError(f"HTTP {r.status_code}: {m.group(1) if m else r.text[:160]}")
                 j = r.json()
-                plan = _json_de(_texto_respuesta(j))
-                motivo = _valido(plan, hoy, historial)
-                if motivo:
-                    raise RuntimeError(f"propuesta descartada ({motivo})")
+                plan, descartes = None, []
+                for opcion in _opciones(_texto_respuesta(j))[:3]:
+                    motivo = _valido(opcion, hoy, historial)
+                    if not motivo:
+                        plan = opcion
+                        break
+                    descartes.append(motivo)
+                if not plan:
+                    raise RuntimeError(f"propuestas descartadas ({'; '.join(descartes) or 'ninguna'})")
+                if descartes:
+                    avisos.append(f"Distinto Básico: antes de la elegida se descartaron {len(descartes)} ({'; '.join(descartes)})")
                 comer = plan.get("comer") if isinstance(plan.get("comer"), dict) else None
                 if comer and not _en_lista(comer.get("nombre", ""), criterios):
                     avisos.append(f"Distinto Básico: el sitio de comer propuesto no estaba en la lista; se omite")
@@ -199,6 +217,34 @@ def proponer(hoy, criterios, historial):
                 if "HTTP 429" in str(e) or "HTTP 5" in str(e):
                     time.sleep(10)
     return None, avisos
+
+
+def para_guardar(hoy, plan):
+    """La propuesta tal cual, para poder recordarla otro día si ese día no sale ninguna."""
+    return dict({k: v for k, v in plan.items() if k not in ("fuentes", "lectura", "recordatorio")},
+                propuesto=hoy.isoformat())
+
+
+def recordatorio(hoy, guardadas):
+    """Si hoy no sale plan nuevo: una propuesta de otro día que siga en pie (con fecha de hoy a dos
+    semanas), la más próxima, y que no se haya recordado ya. Devuelve el plan o None."""
+    candidatas = []
+    for p in guardadas or []:
+        try:
+            dia = dt.date.fromisoformat(str(p.get("dia"))[:10])
+            propuesto = dt.date.fromisoformat(str(p.get("propuesto"))[:10])
+        except (TypeError, ValueError):
+            continue
+        if propuesto < hoy <= dia <= hoy + dt.timedelta(days=14) and not p.get("recordado"):
+            candidatas.append((dia, p))
+    if not candidatas:
+        return None
+    dia, p = min(candidatas, key=lambda x: x[0])
+    plan = dict(p, recordatorio=True, modelo="recordatorio")
+    cuando = "hoy" if dia == hoy else "mañana" if dia == hoy + dt.timedelta(days=1) else f"el {util.fecha_larga(dia)}"
+    m = re.match(r"^(\d{1,2}):(\d{2})$", str(p.get("hora") or ""))
+    plan["cuando"] = cuando + (f", a {util.hora_hablada(int(m.group(1)), int(m.group(2)))}" if m else "")
+    return plan
 
 
 def linea_historial(hoy, plan):

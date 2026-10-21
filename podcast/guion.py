@@ -408,7 +408,13 @@ def escribir_distinto(plan, primera, numero):
 - Español de España, coloquial y natural, hablándole a Iago de tú (nunca «a Iago le…» en tercera persona); sin saludos, sin nombres de los presentadores, sin despedida. Cifras con letras.
 - Una pregunta la responde siempre la otra voz; nada de rellenos.
 - Salida: solo el JSON con «segmentos» (bloque «distinto», noticia {numero}, voz A o B, texto)."""
-    datos = {k: v for k, v in plan.items() if k not in ("fuentes", "fuente", "modelo", "lectura")}
+    if plan.get("recordatorio"):
+        sistema += ("\n- Hoy NO hay plan nuevo: es un RECORDATORIO de una propuesta de otro día que sigue en pie. "
+                    "Dilo con naturalidad justo después de la primera frase (por ejemplo: «hoy no hemos encontrado "
+                    "nada nuevo, pero ojo, que sigue en pie…») y céntrate en cuándo es y si hay que reservar. "
+                    "El «cuando» ya viene dicho respecto a hoy: úsalo tal cual.")
+    datos = {k: v for k, v in plan.items() if k not in ("fuentes", "fuente", "modelo", "lectura", "recordatorio",
+                                                         "recordado", "propuesto")}
     usuario = "PROPUESTA (JSON):\n" + json.dumps(datos, ensure_ascii=False)
     avisos = []
     for modelo in config.MODELOS_TEXTO[:3]:

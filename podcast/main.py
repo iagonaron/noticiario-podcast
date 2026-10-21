@@ -91,7 +91,7 @@ def lo_rapido(textos, primera_voz):
     return segs
 
 
-def plan_del_dia(token, hoy, diag):
+def plan_del_dia(token, hoy, diag, limite=None):
     """Momento Distinto Básico: criterios e historial desde Dropbox y propuesta de Gemini."""
     if not token:
         return None, [], ["Distinto Básico: sin Dropbox no hay criterios"]
@@ -100,16 +100,35 @@ def plan_del_dia(token, hoy, diag):
         return None, [], [f"Distinto Básico: no está {config.DROPBOX_PLANES_CRITERIOS} en la carpeta del pódcast"]
     hist = dropbox.descargar(token, config.DROPBOX_PLANES_HISTORIAL)
     historial = [l for l in (hist.decode("utf-8-sig", "replace").splitlines() if hist else []) if l.strip()]
-    plan, avisos = planes.proponer(hoy, crit.decode("utf-8-sig", "replace"), historial)
+    plan, avisos = planes.proponer(hoy, crit.decode("utf-8-sig", "replace"), historial, limite)
     diag.append(f"Distinto Básico: {'propuesta de ' + plan.get('modelo', '?') if plan else 'sin propuesta'} · "
                 f"{len(historial)} propuestas anteriores")
     return plan, historial, avisos
 
 
+def planes_guardados(token):
+    """Las propuestas de otros días enteras (para recordar una si hoy no sale ninguna)."""
+    try:
+        datos = dropbox.descargar(token, config.DROPBOX_PLANES_GUARDADOS)
+        lista = json.loads(datos.decode("utf-8-sig")) if datos else []
+        return lista if isinstance(lista, list) else []
+    except Exception:
+        return []
+
+
 def apuntar_plan(token, hoy, plan, historial):
-    lineas = historial + [planes.linea_historial(hoy, plan)]
-    texto = "\n".join(lineas[-400:]) + "\n"
-    dropbox.subir(token, config.DROPBOX_PLANES_HISTORIAL, texto.encode("utf-8-sig"))
+    guardadas = planes_guardados(token)
+    if plan.get("recordatorio"):            # ya estaba apuntado: solo se marca como recordado
+        for p in guardadas:
+            if p.get("propuesto") == plan.get("propuesto") and p.get("titulo") == plan.get("titulo"):
+                p["recordado"] = hoy.isoformat()
+    else:
+        lineas = historial + [planes.linea_historial(hoy, plan)]
+        texto = "\n".join(lineas[-400:]) + "\n"
+        dropbox.subir(token, config.DROPBOX_PLANES_HISTORIAL, texto.encode("utf-8-sig"))
+        guardadas.append(planes.para_guardar(hoy, plan))
+    dropbox.subir(token, config.DROPBOX_PLANES_GUARDADOS,
+                  json.dumps(guardadas[-60:], ensure_ascii=False, indent=1).encode("utf-8"))
 
 
 def subir_crudos(token, segs):
@@ -153,7 +172,7 @@ def main():
 
     def buscar_plan():
         try:
-            resultado_plan["v"] = plan_del_dia(token, hoy, [])
+            resultado_plan["v"] = plan_del_dia(token, hoy, [], limite=t0 + config.PLAN_ESPERA_MAX - 15)
         except Exception as e:
             resultado_plan["error"] = f"{type(e).__name__}: {e}"[:300]
 
@@ -216,9 +235,14 @@ def main():
     elif "error" in resultado_plan:
         avisos.append(f"Distinto Básico: {resultado_plan['error']}")
     else:
-        avisos.append("Distinto Básico: la propuesta no llegó a tiempo; hoy va sin ella")
+        avisos.append("Distinto Básico: la propuesta no llegó a tiempo")
+    if not plan and token:
+        # sin plan nuevo: se recuerda uno de otro día que siga en pie (el 20-oct-2026 no hubo momento)
+        plan = planes.recordatorio(hoy, planes_guardados(token))
+        if plan:
+            avisos.append(f"Distinto Básico: sin plan nuevo; se recuerda el propuesto el {plan.get('propuesto')}")
     diag.append(f"Distinto Básico: {'propuesta de ' + plan.get('modelo', '?') if plan else 'sin propuesta'}"
-                + (f" · páginas: {plan.get('lectura')}" if plan else ""))
+                + (f" · páginas: {plan.get('lectura')}" if plan and plan.get("lectura") else ""))
     if plan:
         numero = max([s.get("noticia") or 0 for s in segs_ia] + [0]) + 1
         primera = "B" if segs[-1]["voz"] == "A" else "A"

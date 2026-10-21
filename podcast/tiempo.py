@@ -441,9 +441,14 @@ def texto_breve(horas, r):
         sub = [o for o in horas if o["h"] in rango]
         pmax = max([(o.get("prob") or 0) for o in sub] or [0])
         mm = sum((o.get("lluvia") or 0) for o in sub)
+        # si MeteoGalicia pone chubascos, lluvia o llovizna en alguna hora, como poco «puede caer algo»:
+        # el 21-oct-2026 salió «nubes y claros, con algún episodio de chubascos… No va a llover»,
+        # porque el cielo es de MeteoGalicia y la probabilidad, de Open-Meteo
+        cielo_mojado = any(GRAVEDAD.get(int(o["wcode"]), 0) >= 5 for o in sub
+                           if isinstance(o.get("wcode"), (int, float)))
         if pmax >= 50 or mm >= 0.5:
             llueve.append(nombre)
-        elif pmax >= 30:
+        elif pmax >= 30 or cielo_mojado:
             quiza.append(nombre)
     if llueve:
         frases.append(f"Va a llover {_cuando(llueve)}, así que paraguas."

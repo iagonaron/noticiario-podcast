@@ -443,6 +443,19 @@ def historia():
                          f"({len(datos)} bytes) → {destino}")
 
 
+def tiempo():
+    """El tiempo de hoy hora a hora como lo ve el robot (cielo, probabilidad, litros) y la frase que
+    saldría en el pódcast. Sin cupo y sin datos personales."""
+    from . import tiempo as t, util
+    hoy = util.ahora().date()
+    horas, fuente, problemas, mg = t.obtener_horas(hoy)
+    filas = [f"{o['h']:02d}h · {t.WMO_TEXTO.get(int(o['wcode']), o['wcode']) if isinstance(o.get('wcode'), (int, float)) else '?'}"
+             f" · {o.get('prob')}% · {o.get('lluvia')} mm · franja MG {o.get('prob_franja')}%" for o in horas]
+    r = t.resumir(horas, mg)
+    nota("Tiempo", f"{fuente} · problemas: {problemas or 'ninguno'}\n" + "\n".join(filas)
+         + "\n\nFrase del pódcast: " + t.texto_breve(horas, r))
+
+
 def _parecido(a, b):
     import difflib
     return difflib.SequenceMatcher(None, a, b).ratio() if a and b else 0.0
@@ -705,6 +718,6 @@ if __name__ == "__main__":
              "muestras": muestras, "recortar": recortar, "timbre": timbre, "estado": estado,
              "fuentes_galicia": fuentes_galicia, "galicia": galicia, "pronuncia": pronuncia,
              "fricativas": fricativas, "pausas": pausas,
-             "historia": historia}[prueba]()
+             "historia": historia, "tiempo": tiempo}[prueba]()
         except Exception as e:
             nota(f"Diagnóstico {prueba}", traceback.format_exc()[-1500:], "warning")

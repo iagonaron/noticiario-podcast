@@ -34,7 +34,8 @@ REPARTO = {"distinto": 170}   # palabras del momento Distinto Básico (va aparte
 PALABRAS_POR_NOTICIA = {"titulares": 140, "local": 110, "interes": 150}
 # «low» = el guionista piensa menos y tarda la mitad, pero se queda corto de longitud; vacío = lo normal
 GUION_PENSAR = os.environ.get("GUION_PENSAR") or ""
-PLAN_ESPERA_MAX = 420        # segundos desde el inicio que se espera como mucho la propuesta del Distinto Básico
+PLAN_ESPERA_MAX = 540        # segundos desde el inicio que se espera como mucho la propuesta del Distinto Básico
+                             # (hasta el 21-oct-2026, 420: el 20-oct no dio tiempo y no hubo plan)
 LOCAL_MAX = 3                # noticias de Coruña y Galicia que se cuentan (una más si hay algo gordo)
 LOCAL_CANDIDATAS = 6         # locales del noticiario que se le pasan al guionista para que elija
 MEDIOS_NOTICIA_GORDA = 6     # si una noticia de Galicia la cuentan tantos medios, va siempre (como cuarta)
@@ -106,6 +107,7 @@ DROPBOX_MP3 = _PREFIJO + "/Noticiario de hoy.mp3"
 DROPBOX_GUION = _PREFIJO + "/Guion de hoy.md"
 DROPBOX_PLANES_CRITERIOS = "/Distinto Básico.txt"              # criterios de Iago (solo en Dropbox)
 DROPBOX_PLANES_HISTORIAL = "/Distinto Básico - propuestas.txt"  # lo ya propuesto, para no repetir
+DROPBOX_PLANES_GUARDADOS = "/Distinto Básico - propuestas.json"  # lo mismo entero, para recordarlo otro día
 DROPBOX_CUMPLES = "/Cumpleaños.txt"   # la lista de cumpleaños vive SOLO aquí (el repositorio es público)
 DROPBOX_MUSICA = "/musica"   # intro / transicion / cierre (.mp3 o .wav); si no hay, va sin música
 DROPBOX_DIAGNOSTICO = _PREFIJO + "/Diagnóstico.txt"   # datos técnicos de la última ejecución
