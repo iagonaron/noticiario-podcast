@@ -171,6 +171,21 @@ def _en_lista(nombre, criterios):
     return len(n) >= 4 and n[:20] in util.sin_tildes(criterios or "").lower()
 
 
+class Descartadas(RuntimeError):
+    """Todas las opciones de una respuesta se descartaron; `titulos` dice cuáles eran."""
+    def __init__(self, texto, titulos):
+        super().__init__(texto)
+        self.titulos = titulos
+
+
+def _vetadas(titulos):
+    """Lo que se añade a la pregunta cuando un modelo ya ha propuesto planes repetidos."""
+    if not titulos:
+        return ""
+    return ("\n\nOJO: estas propuestas ya salieron o se repiten con días anteriores; NO las propongas otra vez "
+            "(ni el mismo evento con otro nombre): " + "; ".join(titulos[-9:]) + ".")
+
+
 def _una(modelo, pregunta, hoy, criterios, historial, espera):
     """Una petición a un modelo: devuelve (plan, avisos) o lanza una excepción."""
     t0 = time.time()
@@ -191,7 +206,8 @@ def _una(modelo, pregunta, hoy, criterios, historial, espera):
             break
         descartes.append(motivo)
     if not plan:
-        raise RuntimeError(f"propuestas descartadas ({'; '.join(descartes) or 'ninguna'})")
+        raise Descartadas(f"propuestas descartadas ({'; '.join(descartes) or 'ninguna'})",
+                          [str(o.get("titulo") or "")[:80] for o in _opciones(_texto_respuesta(j))[:3] if o.get("titulo")])
     if descartes:
         avisos.append(f"Distinto Básico: antes de la elegida se descartaron {len(descartes)} ({'; '.join(descartes)})")
     comer = plan.get("comer") if isinstance(plan.get("comer"), dict) else None
@@ -225,12 +241,12 @@ def proponer(hoy, criterios, historial, limite=None):
     limite = limite or (time.time() + 330)
     cola = queue.Queue()
     turno = list(config.MODELOS_PLANES) * 2          # la saturación suele ser pasajera: segunda vuelta
-    en_marcha, proximo = 0, 0.0
+    en_marcha, proximo, vetadas = 0, 0.0, []
 
-    def pedir(modelo, espera):
+    def pedir(modelo, espera, extra):
         t0 = time.time()
         try:
-            plan, av = _una(modelo, pregunta, hoy, criterios, historial, espera)
+            plan, av = _una(modelo, pregunta + extra, hoy, criterios, historial, espera)
             cola.put((modelo, plan, av, None, time.time() - t0))
         except Exception as e:
             cola.put((modelo, None, [], e, time.time() - t0))
@@ -240,7 +256,8 @@ def proponer(hoy, criterios, historial, limite=None):
         queda = limite - ahora
         if turno and queda >= MINIMO and ahora >= proximo:
             modelo = turno.pop(0)
-            threading.Thread(target=pedir, args=(modelo, max(5, min(ESPERA_PETICION, queda - 5))), daemon=True).start()
+            threading.Thread(target=pedir, args=(modelo, max(5, min(ESPERA_PETICION, queda - 5)), _vetadas(vetadas)),
+                             daemon=True).start()
             en_marcha += 1
             proximo = ahora + ESPERA_RELEVO
         if en_marcha == 0 and (not turno or queda < MINIMO):
@@ -259,6 +276,8 @@ def proponer(hoy, criterios, historial, limite=None):
             return plan, avisos + av
         avisos.append(f"Distinto Básico · {modelo} ({seg:.0f} s): {str(error)[:200]}")
         util.log(avisos[-1])
+        if isinstance(error, Descartadas):             # la próxima petición ya sabe qué no repetir
+            vetadas += [t for t in error.titulos if t not in vetadas]
         espera = RESPIRO if ("HTTP 429" in str(error) or "HTTP 5" in str(error)) else 0
         proximo = min(proximo, time.time() + espera)     # tras un fallo, el siguiente casi enseguida
     avisos.append("Distinto Básico: se acabó el tiempo para buscar el plan" if time.time() >= limite - MINIMO
