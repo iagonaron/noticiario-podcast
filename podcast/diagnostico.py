@@ -15,6 +15,7 @@
 """
 import io
 import json
+import os
 import re
 import sys
 import time
@@ -457,6 +458,68 @@ def tiempo():
          + "\n\nFrase del pódcast: " + t.texto_breve(horas, r))
 
 
+def planes_tiempos():
+    """Cuánto tarda la búsqueda del plan según cómo se pida (en paralelo, hasta 5 min cada una):
+    una opción como antes, tres opciones pensando poco, y tres opciones con el modelo de reserva.
+    Gasta 3 peticiones de texto. Aquí solo tiempos, fichas y estados (nada del plan)."""
+    import threading
+    import requests
+    from . import planes as pl, dropbox, config, util
+    token = dropbox.token_acceso()
+    crit = dropbox.descargar(token, config.DROPBOX_PLANES_CRITERIOS)
+    criterios = crit.decode("utf-8-sig", "replace") if crit else "Planes culturales en A Coruña."
+    hist = dropbox.descargar(token, config.DROPBOX_PLANES_HISTORIAL)
+    historial = [l for l in (hist.decode("utf-8-sig", "replace").splitlines() if hist else []) if l.strip()]
+    hoy = util.ahora().date()
+    nueva = pl._pregunta(hoy, criterios, historial, pl.fuentes_del_dia(hoy))
+    vieja = (nueva.replace("elige TRES propuestas de plan para hoy o para los próximos días (tres eventos distintos, en "
+                           "sitios distintos), ordenadas de la que más te convence a la que menos,",
+                           "elige UNA propuesta de plan para hoy o para los próximos días,")
+                  .replace('Responde SOLO con un objeto JSON, sin texto antes ni después: {"opciones": [propuesta 1, '
+                           'propuesta 2, propuesta 3]}, y cada propuesta con estas claves:',
+                           "Responde SOLO con un objeto JSON, sin texto antes ni después, con estas claves:"))
+    casos = [("3.8 · una opción (como antes)", "gemini-3.8-flash", vieja, None),
+             ("3.8 · tres opciones · pensar poco", "gemini-3.8-flash", nueva, {"thinkingLevel": "low"}),
+             ("3.6 · tres opciones", "gemini-3.6-flash", nueva, None)]
+    res = {}
+
+    def uno(nombre, modelo, pregunta, pensar):
+        t0 = time.time()
+        gen = {"temperature": 0.8}
+        if pensar:
+            gen["thinkingConfig"] = pensar
+        try:
+            r = requests.post(pl.URL.format(modelo=modelo), timeout=300,
+                              headers={"x-goog-api-key": os.environ["GEMINI_API_KEY"], "Content-Type": "application/json"},
+                              json={"contents": [{"role": "user", "parts": [{"text": pregunta}]}],
+                                    "tools": [{"url_context": {}}], "generationConfig": gen})
+            seg = time.time() - t0
+            if r.status_code != 200:
+                res[nombre] = f"{seg:.0f} s · HTTP {r.status_code}: {r.text[:200]}"
+                return
+            j = r.json()
+            u = j.get("usageMetadata") or {}
+            try:
+                ops = pl._opciones(pl._texto_respuesta(j))
+                validas = [o for o in ops if not pl._valido(dict(o), hoy, historial)]
+                cuantas = f"{len(ops)} opciones, {len(validas)} válidas"
+            except Exception as e:
+                cuantas = f"sin JSON ({type(e).__name__})"
+            res[nombre] = (f"{seg:.0f} s · {cuantas} · fichas: pregunta {u.get('promptTokenCount')}, páginas "
+                           f"{u.get('toolUsePromptTokenCount')}, pensar {u.get('thoughtsTokenCount')}, respuesta "
+                           f"{u.get('candidatesTokenCount')} · páginas: "
+                           + ", ".join(f"{x.split('/')[2] if '//' in x else x}: {e.lower()}" for x, e in pl._leidas(j)))
+        except Exception as e:
+            res[nombre] = f"{time.time() - t0:.0f} s · {type(e).__name__}: {str(e)[:160]}"
+
+    hilos = [threading.Thread(target=uno, args=c) for c in casos]
+    for h in hilos:
+        h.start()
+    for h in hilos:
+        h.join()
+    nota("Tiempos del plan", "\n".join(f"{k}: {v}" for k, v in res.items()))
+
+
 def _parecido(a, b):
     import difflib
     return difflib.SequenceMatcher(None, a, b).ratio() if a and b else 0.0
@@ -719,6 +782,6 @@ if __name__ == "__main__":
              "muestras": muestras, "recortar": recortar, "timbre": timbre, "estado": estado,
              "fuentes_galicia": fuentes_galicia, "galicia": galicia, "pronuncia": pronuncia,
              "fricativas": fricativas, "pausas": pausas,
-             "historia": historia, "tiempo": tiempo}[prueba]()
+             "historia": historia, "tiempo": tiempo, "planes_tiempos": planes_tiempos}[prueba]()
         except Exception as e:
             nota(f"Diagnóstico {prueba}", traceback.format_exc()[-1500:], "warning")
