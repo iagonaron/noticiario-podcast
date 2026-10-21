@@ -41,6 +41,18 @@
   cuentan. El guionista elige 3 locales por importancia; si algo de Galicia lo cuentan 6 medios o más,
   va siempre y la primera (cuarta noticia). Candidatas de cada día: /Pruebas/Noticias candidatas.json.
   Diagnósticos: `galicia`, `fuentes_galicia`, `estado` (qué guarda el noticiario por dentro).
+- Tiempo (21-oct-2026): el cielo sale de MeteoGalicia y la probabilidad por horas de Open-Meteo, que a veces
+  no coinciden; si MeteoGalicia pone chubascos o lluvia en alguna hora, `tiempo.texto_breve` dice como poco
+  «puede caer algo» (salió «…con algún episodio de chubascos… No va a llover»). Diagnóstico `tiempo` (sin cupo).
+- Distinto Básico (21-oct-2026, tras quedarse el 20-oct sin momento): con Gemini saturado, 3.8 y 3.6 tardan
+  hasta 4 min en decir 503. `planes.proponer` pide tres opciones por petición y se queda la primera válida;
+  si un modelo no contesta en 100 s lanza también el siguiente (relevo, dos vueltas, límite 525 s desde el
+  arranque); la siguiente petición sabe qué opciones salieron repetidas; se descarta lo propuesto sin leer
+  ninguna agenda (3-flash-preview lo hacía). Si no hay plan nuevo, se recuerda uno de otro día que siga en pie
+  (`planes.recordatorio`, desde /Distinto Básico - propuestas.json). Diagnósticos: `planes`, `planes_tiempos`
+  (`modelos_texto`), `historia` (Diagnóstico y guion de otro día, desde el historial de Dropbox; `fecha`).
+- Emojis (21-oct-2026): `util.sin_emojis` deja un espacio en su sitio y lee las flechas como «a»
+  (la agenda decía «9.3013.30»).
 - Música: el flujo «Preparar música» (modos listar, describir, muestras, fondo) prepara candidatas;
   `muestras` monta un trozo de programa real con cada una en Dropbox /Pruebas/Músicas para elegir/.
   Antes de `fondo`, guarda una copia de /musica/fondo.mp3 (se sobrescribe).

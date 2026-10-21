@@ -105,18 +105,31 @@ def palabras(texto):
     return len(re.findall(r"\w+", texto or ""))
 
 
+def _es_flecha(o):
+    return (0x2190 <= o <= 0x21FF or 0x27A1 <= o <= 0x27BF or 0x2B00 <= o <= 0x2B11 or 0x27F0 <= o <= 0x27FF
+            or 0x2900 <= o <= 0x297F or 0x1F800 <= o <= 0x1F8FF)
+
+
 def sin_emojis(texto):
-    """Quita emojis y pictogramas (la voz los leería raro o haría una pausa extraña)."""
+    """Quita emojis y pictogramas (la voz los leería raro o haría una pausa extraña). En su sitio deja
+    un espacio, para no pegar palabras, y una flecha se lee «a»: «9.30➡️13.30» → «9.30 a 13.30»
+    (el 21-oct-2026 la agenda decía «9.3013.30»)."""
     import unicodedata
     fuera = []
     for c in texto or "":
         o = ord(c)
-        if c in "\u200d\ufe0f\ufe0e\u20e3" or 0x1F000 <= o <= 0x1FAFF or 0x1F1E6 <= o <= 0x1F1FF:
+        if c in "\u200d\ufe0f\ufe0e\u20e3":           # unen o matizan emojis: fuera sin más
             continue
-        if o >= 0x2190 and unicodedata.category(c) in ("So", "Sk"):
-            continue
-        fuera.append(c)
-    return re.sub(r"[ \t]{2,}", " ", "".join(fuera)).strip()
+        if _es_flecha(o) and o != 0x21B5:
+            fuera.append(" a ")
+        elif 0x1F000 <= o <= 0x1FAFF or 0x1F1E6 <= o <= 0x1F1FF or (o >= 0x2190 and unicodedata.category(c) in ("So", "Sk")):
+            fuera.append(" ")
+        else:
+            fuera.append(c)
+    t = re.sub(r"[ \t]{2,}", " ", "".join(fuera))
+    t = re.sub(r" ([,.;:!?)])", r"\1", t)             # «hola 🎉, ¿qué tal?» → «hola, ¿qué tal?»
+    t = re.sub(r"(^|[\s(])a (?=a\b)", r"\1", t)       # dos flechas seguidas: una sola «a»
+    return t.strip()
 
 
 def sin_tildes(s):
