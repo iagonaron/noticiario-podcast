@@ -31,6 +31,10 @@ on:
         description: "Para «historia»: día a recuperar, AAAA-MM-DD (vacío = ayer)"
         required: false
         type: string
+      modelos_texto:
+        description: "Para «planes_tiempos»: probar solo estos modelos de texto (separados por comas)"
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -46,6 +50,7 @@ jobs:
       DROPBOX_REFRESH_TOKEN: ${{ secrets.DROPBOX_REFRESH_TOKEN }}
       PRUEBAS: ${{ inputs.pruebas }}
       MODELOS_VOZ: ${{ inputs.modelos_voz }}
+      MODELOS_TEXTO_PRUEBA: ${{ inputs.modelos_texto }}
       CRUDO: ${{ inputs.crudo }}
       FECHA: ${{ inputs.fecha }}
       SIN_ETIQUETA: ${{ inputs.sin_etiqueta }}

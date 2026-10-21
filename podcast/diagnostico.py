@@ -481,6 +481,8 @@ def planes_tiempos():
     casos = [("3.8 · una opción (como antes)", "gemini-3.8-flash", vieja, None),
              ("3.8 · tres opciones · pensar poco", "gemini-3.8-flash", nueva, {"thinkingLevel": "low"}),
              ("3.6 · tres opciones", "gemini-3.6-flash", nueva, None)]
+    if os.environ.get("MODELOS_TEXTO_PRUEBA"):            # p. ej. «gemini-3.5-flash-lite»: solo esos
+        casos = [(f"{m} · tres opciones", m, nueva, None) for m in os.environ["MODELOS_TEXTO_PRUEBA"].split(",") if m.strip()]
     res = {}
 
     def uno(nombre, modelo, pregunta, pensar):
