@@ -112,8 +112,7 @@ def _es_flecha(o):
 
 def sin_emojis(texto):
     """Quita emojis y pictogramas (la voz los leería raro o haría una pausa extraña). En su sitio deja
-    un espacio, para no pegar palabras, y una flecha se lee «a»: «9.30➡️13.30» → «9.30 a 13.30»
-    (el 21-oct-2026 la agenda decía «9.3013.30»)."""
+    un espacio, para no pegar palabras, y una flecha se lee «a»: «9.30➡️13.30» → «9.30 a 13.30»."""
     import unicodedata
     fuera = []
     for c in texto or "":

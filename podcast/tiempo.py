@@ -453,8 +453,8 @@ def texto_breve(horas, r):
     if llueve:
         frases.append(f"Va a llover {_cuando(llueve)}, así que paraguas."
                       + (f" Y puede caer algo {_cuando(quiza)}." if quiza else ""))
-    elif quiza:
-        frases.append(f"No se espera mucha lluvia, aunque puede caer algo {_cuando(quiza)}.")
+    elif quiza:      # primero lo que puede caer: así no choca con «chubascos» en la frase de antes
+        frases.append(f"Puede caer algo {_cuando(quiza)}, aunque no se espera mucha lluvia.")
     else:
         frases.append("No va a llover.")
     uv = r.get("uv")
