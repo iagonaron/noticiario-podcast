@@ -205,10 +205,11 @@ def main():
     diag.append(f"Agenda: hoy {len(eventos['hoy'])} · mañana {len(eventos['manana'])} · avisos {len(av)}")
 
     # el gimnasio de hoy (los ajustes y la web viven solo en Dropbox: /Gimnasio.txt)
-    texto_gym, tabla_gym = "", ""
+    texto_gym, tabla_gym, info_gym = "", "", ""
     if token:
         try:
-            texto_gym, tabla_gym, dg, av = gimnasio.texto_de_hoy(token, hoy)
+            info_gym, tabla_gym, dg, av = gimnasio.texto_de_hoy(token, hoy)
+            texto_gym = gimnasio.solo_la_hora(info_gym)      # en el pódcast, solo a tu hora / antes / más tarde
             diag += dg
             avisos += av
         except Exception as e:
@@ -322,6 +323,13 @@ def main():
         with open(mp3, "rb") as f:
             dropbox.subir(token, config.DROPBOX_MP3, f.read())
         dropbox.subir(token, config.DROPBOX_GUION, md.encode("utf-8-sig"))
+        if tabla_gym and not config.PRUEBA:
+            # el gimnasio de hoy (frase con el motivo + tabla) para el correo «Ocupación GYM y repositorios» (7:42)
+            try:
+                dropbox.subir(token, config.DROPBOX_GIMNASIO_HOY,
+                              f"# Gimnasio · {hoy.isoformat()}\n\n{info_gym}\n{tabla_gym}".encode("utf-8"))
+            except Exception as e:
+                avisos.append(f"Gimnasio: no se pudo guardar la tabla de hoy ({type(e).__name__})")
         subido = True
         util.log("Subido a Dropbox")
         if plan and not config.PRUEBA:

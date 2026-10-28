@@ -286,6 +286,15 @@ def tabla(franjas, hoy, aj):
               "«Por libre» = reservas de sala de máquinas + tarifa reducida (contándote a ti si reservaste)._\n")
 
 
+def solo_la_hora(frase):
+    """Para el pódcast (28-oct-2026, «sin más explicaciones»): solo si va a su hora, antes o más tarde.
+    La frase completa, con el motivo, y la tabla van en el correo «Ocupación GYM y repositorios»."""
+    m = re.match(r"Gimnasio: (puedes ir a tu hora, a las [\d:]+|mejor ve (?:antes|más tarde), a las [\d:]+)", frase or "")
+    if m:
+        return f"Gimnasio: {m.group(1)}."
+    return "Gimnasio: hoy abajo está complicado toda la mañana." if frase else ""
+
+
 def toca_hiit(aj):
     """¿El entreno que toca hoy lleva HIIT? Lo mira en la app de entreno (Supabase, solo lectura): el día
     siguiente al último registrado. Las claves viven en Dropbox (/Gimnasio.txt), no aquí."""

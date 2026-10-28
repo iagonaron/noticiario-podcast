@@ -110,6 +110,7 @@ DROPBOX_GUION = _PREFIJO + "/Guion de hoy.md"
 DROPBOX_PLANES_CRITERIOS = "/Distinto Básico.txt"              # criterios de Iago (solo en Dropbox)
 DROPBOX_PLANES_HISTORIAL = "/Distinto Básico - propuestas.txt"  # lo ya propuesto, para no repetir
 DROPBOX_PLANES_GUARDADOS = "/Distinto Básico - propuestas.json"  # lo mismo entero, para recordarlo otro día
+DROPBOX_GIMNASIO_HOY = "/Gimnasio hoy.md"   # frase + tabla del gimnasio de hoy (la lee el correo de las 7:42)
 DROPBOX_CUMPLES = "/Cumpleaños.txt"   # la lista de cumpleaños vive SOLO aquí (el repositorio es público)
 DROPBOX_MUSICA = "/musica"   # intro / transicion / cierre (.mp3 o .wav); si no hay, va sin música
 DROPBOX_DIAGNOSTICO = _PREFIJO + "/Diagnóstico.txt"   # datos técnicos de la última ejecución
