@@ -212,6 +212,10 @@ def main():
             texto_gym = gimnasio.solo_la_hora(info_gym)      # en el pódcast, solo a tu hora / antes / más tarde
             diag += dg
             avisos += av
+            if tabla_gym and not config.PRUEBA:
+                # ya, al principio: el correo «Ocupación GYM y repositorios» (7:42) la lee de Dropbox
+                dropbox.subir(token, config.DROPBOX_GIMNASIO_HOY,
+                              f"# Gimnasio · {hoy.isoformat()}\n\n{info_gym}\n{tabla_gym}".encode("utf-8"))
         except Exception as e:
             avisos.append(f"Gimnasio: {type(e).__name__}: {str(e)[:200]}")
 
@@ -323,13 +327,6 @@ def main():
         with open(mp3, "rb") as f:
             dropbox.subir(token, config.DROPBOX_MP3, f.read())
         dropbox.subir(token, config.DROPBOX_GUION, md.encode("utf-8-sig"))
-        if tabla_gym and not config.PRUEBA:
-            # el gimnasio de hoy (frase con el motivo + tabla) para el correo «Ocupación GYM y repositorios» (7:42)
-            try:
-                dropbox.subir(token, config.DROPBOX_GIMNASIO_HOY,
-                              f"# Gimnasio · {hoy.isoformat()}\n\n{info_gym}\n{tabla_gym}".encode("utf-8"))
-            except Exception as e:
-                avisos.append(f"Gimnasio: no se pudo guardar la tabla de hoy ({type(e).__name__})")
         subido = True
         util.log("Subido a Dropbox")
         if plan and not config.PRUEBA:
