@@ -181,18 +181,12 @@ def resumen(franjas, hoy, aj):
 
     abajo = [f for f in del_dia if _es(f, abajo_t) and f["personas"] >= 1 and _solapa(f, v_ini, v_fin)]
     grupo = _juntar([f for f in abajo if f["personas"] >= 2])        # 2 o más acaparan las máquinas de abajo
-    individuales = _juntar([f for f in abajo if f["personas"] == 1])
     choca = [f for f in grupo if _solapa(f, p_ini, p_fin)]
-    frases = []
 
-    # 1) el veredicto: ¿a la hora de siempre, antes o más tarde?
-    elegido = p_ini
-    if not choca:
-        despues = [f for f in grupo if f["ini"] >= p_fin]
-        extra = (f" La siguiente clase de grupo abajo es {_clase(despues[0])}." if despues else
-                 " Abajo no hay clases de grupo en toda la mañana.")
-        frases.append(f"Gimnasio: puedes entrenar en tu horario habitual, a las {_hh(p_ini)}." + extra)
-    else:
+    # Una sola frase (lo pidió así el 28-oct-2026): ¿a tu hora, antes o después? (y por qué, muy breve),
+    # y cuánta gente habrá entrenando por libre. El spinning y el resto van solo en la tabla del guion.
+    elegido, motivo = p_ini, ""
+    if choca:
         antes = despues = None
         for ini in range(p_ini - 5, v_ini - 1, -5):
             if not any(_solapa(f, ini, ini + duracion) for f in grupo):
@@ -202,49 +196,37 @@ def resumen(franjas, hoy, aj):
             if not any(_solapa(f, ini, ini + duracion) for f in grupo):
                 despues = ini
                 break
-        motivo = util.lista_hablada([_clase(f) for f in choca])
+        f = choca[0]
+        motivo = f"{_nombre_clase(f['actividad'])} con {f['personas']} de {_hh(f['ini'])} a {_hh(f['fin'])}"
         if antes is not None and (despues is None or p_ini - antes <= despues - p_ini):
-            frases.append(f"Gimnasio: hoy es mejor que vayas antes, a las {_hh(antes)}, porque abajo hay {motivo}.")
             elegido = antes
         elif despues is not None:
-            frases.append(f"Gimnasio: hoy es mejor que vayas más tarde, a las {_hh(despues)}, porque abajo hay {motivo}.")
             elegido = despues
         else:
-            frases.append(f"Gimnasio: hoy abajo está complicado toda la mañana: hay {motivo}.")
-    if individuales:
-        frases.append("Abajo también hay " + util.lista_hablada(
-            [f"{_nombre_clase(f['actividad'])} individual de {_hh(f['ini'])} a {_hh(f['fin'])}" for f in individuales])
-            + ", pero es una sola persona.")
+            elegido = None
 
-    # 2) spinning (los días de HIIT quiere la bici de spinning)
-    spin_desde = _min(aj["spinning desde"])
-    spin = sorted([f for f in del_dia if _es(f, spin_t) and f["fin"] > spin_desde and f["ini"] < v_fin],
-                  key=lambda f: f["ini"])
-    if spin:
-        trozos = [f"{_nombre_clase(f['actividad'])} de {_hh(f['ini'])} a {_hh(f['fin'])}"
-                  + (f" con {_personas(f['personas'])}" if f["personas"] else ", de momento sin nadie apuntado")
-                  for f in spin]
-        frases.append(f"Spinning desde las {_hh(spin_desde)}: " + util.lista_hablada(trozos) + ".")
+    gente = ""
+    if elegido is not None:
+        e_ini, e_fin = elegido, elegido + duracion
+        sala = [f for f in del_dia if _es(f, sala_t) and _solapa(f, e_ini, e_fin)]
+        if sala:
+            puntos = sorted({e_ini} | {f["ini"] for f in sala if e_ini < f["ini"] < e_fin})
+            n = max(sum(f["personas"] for f in sala if f["ini"] <= t < f["fin"]) for t in puntos)
+            if descontar and n:
+                n -= 1                             # él también reserva sala de máquinas: no se cuenta
+            gente = f"; habrá {'unas ' + str(n) + ' personas' if n > 1 else ('1 persona' if n == 1 else 'muy poca gente')}"
+
+    if not choca:
+        frase = f"Gimnasio: puedes ir a tu hora, a las {_hh(p_ini)}{gente}."
+    elif elegido is None:
+        frase = f"Gimnasio: hoy abajo está complicado toda la mañana: {motivo}."
     else:
-        frases.append(f"Desde las {_hh(spin_desde)} no hay spinning: si toca HIIT, la bici de spinning está libre.")
-
-    # 3) gente entrenando por libre (reservas de sala de máquinas + tarifa reducida) a la hora elegida, sin él
-    e_ini, e_fin = elegido, elegido + duracion
-    sala = [f for f in del_dia if _es(f, sala_t) and _solapa(f, e_ini, e_fin)]
-    if sala:
-        puntos = sorted({e_ini} | {f["ini"] for f in sala if e_ini < f["ini"] < e_fin})
-        n = 0
-        for t in puntos:                       # lo más lleno que va a estar durante la fuerza principal
-            n = max(n, sum(f["personas"] for f in sala if f["ini"] <= t < f["fin"]))
-        if descontar and n:
-            n -= 1                             # él también reserva sala de máquinas: no se cuenta
-        cuando = "En tu horario habitual" if elegido == p_ini else "A esa hora"
-        frases.append(f"{cuando} habrá {'unas ' if n > 1 else ''}{_personas(n) if n else 'nadie más'} entrenando por libre"
-                      f"{', sin contarte a ti' if n else ''}.")
+        cuando = "antes" if elegido < p_ini else "más tarde"
+        frase = f"Gimnasio: mejor ve {cuando}, a las {_hh(elegido)}, que abajo hay {motivo}{gente}."
 
     diag = ["Gimnasio: " + ", ".join(f"{f['actividad']} {_hh(f['ini'])}-{_hh(f['fin'])}={f['personas']}/{f.get('aforo')}"
                                    for f in sorted(del_dia, key=lambda f: f["ini"]) if _solapa(f, v_ini, v_fin))]
-    return " ".join(frases), diag
+    return frase, diag
 
 
 def tabla(franjas, hoy, aj):
