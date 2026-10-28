@@ -291,7 +291,12 @@ def solo_la_hora(frase):
     La frase completa, con el motivo, y la tabla van en el correo «Ocupación GYM y repositorios»."""
     m = re.match(r"Gimnasio: (puedes ir a tu hora, a las [\d:]+|mejor ve (?:antes|más tarde), a las [\d:]+)", frase or "")
     if m:
-        return f"Gimnasio: {m.group(1)}."
+        bici = ""                                    # los días de HIIT, sí o no a la bici de spinning (lo pidió)
+        if "tendrás la bici de spinning libre" in frase:
+            bici = ", y tendrás bici de spinning para el HIIT"
+        elif "no tendrás bici de spinning" in frase:
+            bici = "; hoy no habrá bici de spinning para el HIIT"
+        return f"Gimnasio: {m.group(1)}{bici}."
     return "Gimnasio: hoy abajo está complicado toda la mañana." if frase else ""
 
 
