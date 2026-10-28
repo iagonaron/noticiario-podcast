@@ -783,6 +783,18 @@ def config_whisper():
     return config.WHISPER_MODELO
 
 
+def gimnasio():
+    """El bloque del gimnasio de hoy (texto y tabla) a Dropbox /Pruebas/Gimnasio (prueba).md. Sin cupo.
+    Nada de eso sale en las anotaciones (el repositorio es público)."""
+    from . import dropbox, gimnasio as g, util
+    token = dropbox.token_acceso()
+    texto, tabla, diag, avisos = g.texto_de_hoy(token, util.ahora().date())
+    md = f"# Gimnasio · prueba {util.ahora():%Y-%m-%d %H:%M}\n\n{texto or '(sin texto)'}\n{tabla}\n\n" + "\n".join(diag + avisos)
+    dropbox.subir(token, "/Pruebas/Gimnasio (prueba).md", md.encode("utf-8-sig"))
+    nota("Gimnasio", f"Hecho: {len(texto)} caracteres de texto, tabla {'sí' if tabla else 'no'}, {len(avisos)} avisos "
+         "(el detalle, en Dropbox /Pruebas)")
+
+
 def guion():
     from . import guion as g, util
     falsas = {"portada": [{"titulo": f"Noticia de prueba {i}", "fuente": "Prueba", "categoria": "",
@@ -804,6 +816,6 @@ if __name__ == "__main__":
              "fuentes_galicia": fuentes_galicia, "galicia": galicia, "pronuncia": pronuncia,
              "fricativas": fricativas, "pausas": pausas,
              "historia": historia, "tiempo": tiempo, "planes_tiempos": planes_tiempos,
-             "agenda_caracteres": agenda_caracteres}[prueba]()
+             "agenda_caracteres": agenda_caracteres, "gimnasio": gimnasio}[prueba]()
         except Exception as e:
             nota(f"Diagnóstico {prueba}", traceback.format_exc()[-1500:], "warning")

@@ -7,7 +7,7 @@ import threading
 import time
 import traceback
 
-from . import agenda, config, cumples, dropbox, festivos, guion, montaje, noticias, planes, tiempo, util, voces
+from . import agenda, config, cumples, dropbox, festivos, gimnasio, guion, montaje, noticias, planes, tiempo, util, voces
 
 AQUI = os.path.dirname(os.path.abspath(__file__))
 SALIDA = os.path.join(AQUI, "..", "salida")
@@ -204,6 +204,16 @@ def main():
     texto_agenda = agenda.texto_plantilla(eventos, av)
     diag.append(f"Agenda: hoy {len(eventos['hoy'])} · mañana {len(eventos['manana'])} · avisos {len(av)}")
 
+    # el gimnasio de hoy (los ajustes y la web viven solo en Dropbox: /Gimnasio.txt)
+    texto_gym, tabla_gym = "", ""
+    if token:
+        try:
+            texto_gym, tabla_gym, dg, av = gimnasio.texto_de_hoy(token, hoy)
+            diag += dg
+            avisos += av
+        except Exception as e:
+            avisos.append(f"Gimnasio: {type(e).__name__}: {str(e)[:200]}")
+
     texto_dias = ""
     if token:
         try:
@@ -223,7 +233,7 @@ def main():
     etapa("guion")
     segs_ia, info = guion.escribir(ahora, datos)
     avisos += info.get("avisos", [])
-    inicio = guion.apertura(ahora) + lo_rapido([texto_dias, texto_agenda, texto_tiempo], "B")
+    inicio = guion.apertura(ahora) + lo_rapido([texto_dias, texto_agenda, texto_gym, texto_tiempo], "B")
     segs = inicio + segs_ia
 
     etapa("Distinto Básico")
@@ -299,7 +309,7 @@ def main():
     diag.append(f"Duración: {duracion / 60:.1f} min · total de la ejecución {(time.time() - t0) / 60:.1f} min")
 
     extra = f" · voz: {motor} · {duracion / 60:.1f} min · generado a las {util.ahora():%H:%M}"
-    md = guion.a_markdown(segs, dict(info, avisos=avisos), ahora, extra)
+    md = guion.a_markdown(segs, dict(info, avisos=avisos), ahora, extra) + tabla_gym
     with open(os.path.join(SALIDA, "Guion de hoy.md"), "w", encoding="utf-8") as f:
         f.write(md)
     with open(os.path.join(SALIDA, "datos.json"), "w", encoding="utf-8") as f:

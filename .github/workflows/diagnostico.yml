@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
     inputs:
       pruebas:
-        description: "Pruebas separadas por espacios: elpais noticias voz edge piper vozlarga guion planes cortes muestras pronuncia fricativas pausas recortar timbre historia"
+        description: "Pruebas separadas por espacios: elpais noticias voz edge piper vozlarga guion planes cortes muestras pronuncia fricativas pausas recortar timbre historia gimnasio"
         required: false
         default: "voz"
         type: string
