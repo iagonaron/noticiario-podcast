@@ -57,6 +57,8 @@
   hora «13:30» con números, tal cual: «trece treinta», «catorce en punto» (`pronuncia.para_voz`), para no
   dudar de qué hora es. Las horas de los eventos siguen «a las nueve de la noche». Ver los títulos tal cual
   y cómo se leen: diagnóstico `agenda_caracteres` (a Dropbox /Pruebas, privado).
+- Depor en Riazor (28-oct-2026): esos eventos del calendario (los apunta la tarea de los lunes) solo se dicen
+  el mismo día, no en «Y mañana…» (`agenda.SOLO_EL_DIA`); al Iago solo le importan ese día, para aparcar.
 - Música: el flujo «Preparar música» (modos listar, describir, muestras, fondo) prepara candidatas;
   `muestras` monta un trozo de programa real con cada una en Dropbox /Pruebas/Músicas para elegir/.
   Antes de `fondo`, guarda una copia de /musica/fondo.mp3 (se sobrescribe).

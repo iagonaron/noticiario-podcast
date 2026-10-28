@@ -131,9 +131,20 @@ def _lista(eventos, maximo):
     return "; ".join(trozos[:-1]) + ("; y " if len(trozos) > 1 else "") + trozos[-1] if trozos else ""
 
 
+# Eventos que solo se dicen el mismo día, no la víspera (Iago, 28-oct-2026: el Depor en Riazor solo le
+# importa ese día, para aparcar). Se comparan con el título en minúsculas y sin tildes.
+SOLO_EL_DIA = ("depor en riazor",)
+
+
+def _solo_el_dia(e):
+    t = util.sin_tildes(e.get("titulo") or "").lower()
+    return any(x in t for x in SOLO_EL_DIA)
+
+
 def texto_plantilla(eventos, problemas=None):
     """Agenda de hoy y de mañana en dos frases."""
-    hoy, man = eventos.get("hoy") or [], eventos.get("manana") or []
+    hoy = eventos.get("hoy") or []
+    man = [e for e in (eventos.get("manana") or []) if not _solo_el_dia(e)]
     if not hoy and not man:
         if problemas:
             return "Hoy no he podido leer tu agenda; échale un ojo en el noticiario."
