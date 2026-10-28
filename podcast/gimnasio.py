@@ -167,43 +167,50 @@ def _clase(f, con_hora=True):
     return t + f", con {_personas(f['personas'])}"
 
 
-def resumen(franjas, hoy, aj):
+def resumen(franjas, hoy, aj, hiit=False):
     """Texto fijo del bloque (y un diagnóstico con las franjas usadas). Vacío si hoy no hay datos.
-    `franjas` ya trae «personas» (apuntados)."""
+    `franjas` ya trae «personas» (apuntados). Con `hiit` (hoy toca empuje, que lleva HIIT), la hora también
+    se elige para que la bici de spinning esté libre en el rato del HIIT."""
     del_dia = [f for f in franjas if f["dia"] == hoy.day]
     if not del_dia:
         return "", ["Gimnasio: la web no trae franjas para hoy"]
     p_ini, p_fin = _tramo(aj["mi franja principal"])
     v_ini, v_fin = _tramo(aj["miro desde-hasta"])
+    h_desde, h_hasta = _tramo(aj.get("hiit tras empezar", "1:05-1:30"))     # minutos tras empezar (h:mm)
     abajo_t, spin_t, sala_t = _lista(aj["molestan abajo"]), _lista(aj["spinning"]), _lista(aj["salas de maquinas"])
     duracion = p_fin - p_ini
     descontar = util.sin_tildes(aj.get("descontarme en sala de maquinas", "si").lower()).startswith("s")
 
     abajo = [f for f in del_dia if _es(f, abajo_t) and f["personas"] >= 1 and _solapa(f, v_ini, v_fin)]
     grupo = _juntar([f for f in abajo if f["personas"] >= 2])        # 2 o más acaparan las máquinas de abajo
-    choca = [f for f in grupo if _solapa(f, p_ini, p_fin)]
+    spin = _juntar([f for f in del_dia if _es(f, spin_t) and f["personas"] >= 1])   # clase con gente = sin bici
 
-    # Una sola frase (lo pidió así el 28-oct-2026): ¿a tu hora, antes o después? (y por qué, muy breve),
-    # y cuánta gente habrá entrenando por libre. El spinning y el resto van solo en la tabla del guion.
-    elegido, motivo = p_ini, ""
-    if choca:
-        antes = despues = None
-        for ini in range(p_ini - 5, v_ini - 1, -5):
-            if not any(_solapa(f, ini, ini + duracion) for f in grupo):
-                antes = ini
-                break
-        for ini in range(p_ini + 5, v_fin - duracion + 1, 5):
-            if not any(_solapa(f, ini, ini + duracion) for f in grupo):
-                despues = ini
-                break
-        f = choca[0]
-        motivo = f"{_nombre_clase(f['actividad'])} con {f['personas']} de {_hh(f['ini'])} a {_hh(f['fin'])}"
-        if antes is not None and (despues is None or p_ini - antes <= despues - p_ini):
-            elegido = antes
-        elif despues is not None:
-            elegido = despues
-        else:
-            elegido = None
+    def choque_fuerza(ini):
+        return [f for f in grupo if _solapa(f, ini, ini + duracion)]
+
+    def choque_bici(ini):
+        return [f for f in spin if _solapa(f, ini + h_desde, ini + h_hasta)] if hiit else []
+
+    def clase(f):
+        return f"{_nombre_clase(f['actividad'])} con {f['personas']} de {_hh(f['ini'])} a {_hh(f['fin'])}"
+
+    # Una sola frase (28-oct-2026): ¿a tu hora, antes o después? (y por qué, muy breve) y cuánta gente habrá;
+    # los días de HIIT, además, si tendrá la bici de spinning. Primero la fuerza; la bici, si se puede.
+    candidatas = [p_ini] + [x for paso in range(5, 241, 5) for x in (p_ini - paso, p_ini + paso)
+                            if v_ini <= x and x + duracion <= v_fin]
+    fuerza = next((x for x in candidatas if not choque_fuerza(x)), None)        # lo primero: la fuerza
+    elegido, sin_bici = fuerza, False
+    if fuerza is not None and choque_bici(fuerza):
+        # la bici es menos importante: solo se mueve la hora como mucho «mover por la bici» minutos más
+        margen = _min(aj.get("mover por la bici", "0:30"))
+        otra = next((x for x in candidatas if abs(x - fuerza) <= margen
+                     and not choque_fuerza(x) and not choque_bici(x)), None)
+        elegido, sin_bici = (otra, False) if otra is not None else (fuerza, True)
+    motivos = []
+    if elegido != p_ini:
+        motivos = [clase(f) + " abajo" for f in choque_fuerza(p_ini)]
+        if not sin_bici:
+            motivos += [clase(f) + " en la sala de bicis" for f in choque_bici(p_ini)]
 
     gente = ""
     if elegido is not None:
@@ -214,15 +221,30 @@ def resumen(franjas, hoy, aj):
             n = max(sum(f["personas"] for f in sala if f["ini"] <= t < f["fin"]) for t in puntos)
             if descontar and n:
                 n -= 1                             # él también reserva sala de máquinas: no se cuenta
-            gente = f"; habrá {'unas ' + str(n) + ' personas' if n > 1 else ('1 persona' if n == 1 else 'muy poca gente')}"
+            gente = f"habrá {'unas ' + str(n) + ' personas' if n > 1 else ('1 persona' if n == 1 else 'muy poca gente')}"
 
-    if not choca:
-        frase = f"Gimnasio: puedes ir a tu hora, a las {_hh(p_ini)}{gente}."
-    elif elegido is None:
-        frase = f"Gimnasio: hoy abajo está complicado toda la mañana: {motivo}."
+    bici = ""
+    if hiit and elegido is not None:
+        if sin_bici:
+            f = choque_bici(elegido)[0]
+            bici = f"para el HIIT no tendrás bici de spinning ({clase(f)}): haz el C"
+        else:
+            bici = "y para el HIIT tendrás la bici de spinning libre"
+
+    if elegido is None:
+        frase = "Gimnasio: hoy abajo está complicado toda la mañana: " + util.lista_hablada(
+            [clase(f) for f in grupo]) + "."
+    elif elegido == p_ini:
+        frase = f"Gimnasio: puedes ir a tu hora, a las {_hh(p_ini)}"
     else:
         cuando = "antes" if elegido < p_ini else "más tarde"
-        frase = f"Gimnasio: mejor ve {cuando}, a las {_hh(elegido)}, que abajo hay {motivo}{gente}."
+        frase = f"Gimnasio: mejor ve {cuando}, a las {_hh(elegido)}, porque hay " + util.lista_hablada(motivos)
+    if elegido is not None:
+        colas = [c for c in (gente, bici) if c]
+        if bici and not sin_bici and gente:
+            frase += "; " + gente + " " + bici + "."
+        else:
+            frase += "".join("; " + c for c in colas) + "."
 
     diag = ["Gimnasio: " + ", ".join(f"{f['actividad']} {_hh(f['ini'])}-{_hh(f['fin'])}={f['personas']}/{f.get('aforo')}"
                                    for f in sorted(del_dia, key=lambda f: f["ini"]) if _solapa(f, v_ini, v_fin))]
@@ -264,6 +286,25 @@ def tabla(franjas, hoy, aj):
               "«Por libre» = reservas de sala de máquinas + tarifa reducida (contándote a ti si reservaste)._\n")
 
 
+def toca_hiit(aj):
+    """¿El entreno que toca hoy lleva HIIT? Lo mira en la app de entreno (Supabase, solo lectura): el día
+    siguiente al último registrado. Las claves viven en Dropbox (/Gimnasio.txt), no aquí."""
+    url, clave = aj.get("entreno url"), aj.get("entreno clave")
+    dias_hiit = {int(x) for x in re.findall(r"\d+", aj.get("dias con hiit", "1, 4"))}
+    num = int(aj.get("dias del ciclo", "6"))
+    if not url or not clave:
+        return None, "Gimnasio: sin «entreno url/clave» no se mira si toca HIIT"
+    import requests
+    r = requests.get(url.rstrip("/") + "/rest/v1/ironbike_sesiones",
+                     params={"select": "dia_ciclo,fecha", "dia_ciclo": f"gte.1", "order": "fecha.desc,id.desc", "limit": "1"},
+                     headers={"apikey": clave, "Authorization": f"Bearer {clave}"}, timeout=20)
+    r.raise_for_status()
+    filas = r.json()
+    ultimo = filas[0]["dia_ciclo"] if filas else 0
+    hoy_toca = (ultimo % num) + 1 if ultimo else 1
+    return hoy_toca in dias_hiit, f"Gimnasio: último entreno D{ultimo} ({filas[0]['fecha'] if filas else '-'}) → hoy D{hoy_toca}"
+
+
 def texto_de_hoy(token, hoy):
     """Lee los ajustes de Dropbox y la web del gimnasio. Devuelve (texto, tabla, diagnóstico, avisos)."""
     from . import dropbox
@@ -288,5 +329,15 @@ def texto_de_hoy(token, hoy):
             f["personas"] = f["libres"]
     else:
         apuntados(franjas, siguiente)
-    texto, diag = resumen(franjas, hoy, aj)
+    hiit = False
+    try:
+        hiit, nota = toca_hiit(aj)
+        if hiit is None:
+            avisos.append(nota)
+        diag_hiit = [nota]
+    except Exception as e:
+        diag_hiit = []
+        avisos.append(f"Gimnasio: no se pudo mirar qué entreno toca ({type(e).__name__})")
+    texto, diag = resumen(franjas, hoy, aj, hiit=bool(hiit))
+    diag = diag_hiit + diag
     return texto, tabla(franjas, hoy, aj), diag + [f"Gimnasio: {len(franjas)} franjas esta semana y {len(siguiente)} la siguiente"], avisos

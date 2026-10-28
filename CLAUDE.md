@@ -65,7 +65,8 @@
   (`gh api repos/iagonaron/noticiario-podcast/check-runs/<job_id>/annotations`) y en
   «Diagnóstico.txt» de la carpeta del pódcast en Dropbox.
 - Gimnasio (28-oct-2026): bloque opcional «Gimnasio» después de la agenda (`gimnasio.py`, plantilla fija, sin IA)
-  (UNA frase: a su hora o antes/después y por qué, más cuánta gente) y una tabla por franjas al final del guion escrito. Todo lo personal (la web de reservas, las horas de Iago,
+  (UNA frase: a su hora o antes/después y por qué, más cuánta gente; los días con HIIT —el siguiente al último
+  entreno de su app, leída de Supabase con las claves de /Gimnasio.txt— también si tendrá la bici de spinning) y una tabla por franjas al final del guion escrito. Todo lo personal (la web de reservas, las horas de Iago,
   qué actividades le molestan) vive SOLO en Dropbox /Gimnasio.txt; sin ese fichero no hay bloque. La web marca
   plazas libres (personas = aforo − libres; aforo = lo más alto de esa franja en esta semana y la siguiente).
   Diagnóstico `gimnasio` (sin cupo) → Dropbox /Pruebas/Gimnasio (prueba).md.
