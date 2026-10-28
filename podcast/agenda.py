@@ -153,4 +153,18 @@ def texto_plantilla(eventos, problemas=None):
         return f"Hoy no tienes nada en la agenda. Mañana: {_lista(man, 4)}."
     texto = f"En la agenda de hoy: {_lista(hoy, 6)}."
     texto += f" Y mañana: {_lista(man, 4)}." if man else " Mañana, nada."
-    return texto
+    return texto + _aviso_aparcar(hoy)
+
+
+def _aviso_aparcar(hoy):
+    """Día de partido en Riazor: cerca de casa de Iago no hay dónde aparcar desde un rato antes hasta un rato
+    después, así que mejor no mover el coche (lo pidió el 28-oct-2026)."""
+    partidos = [e for e in hoy if _solo_el_dia(e)]
+    if not partidos:
+        return ""
+    e = partidos[0]
+    if e.get("min") is None:
+        return " Ojo, que hoy hay partido en Riazor, aún sin hora: piénsatelo antes de mover el coche."
+    desde, hasta = max(0, e["min"] - 90), min(23 * 60 + 59, e["min"] + 150)   # hora y media antes, dos y media después
+    return (f" Ojo con el coche: con el partido, mejor no moverlo entre {util.hora_hablada(desde // 60, desde % 60)}"
+            f" y {util.hora_hablada(hasta // 60, hasta % 60)}, que no habrá dónde aparcar.")
