@@ -72,5 +72,6 @@
   tabla, van a Dropbox /Gimnasio hoy.md para el correo de las 7:42 «Ocupación GYM y repositorios»; los días con HIIT —el siguiente al último
   entreno de su app, leída de Supabase con las claves de /Gimnasio.txt— también si tendrá la bici de spinning) y una tabla por franjas al final del guion escrito. Todo lo personal (la web de reservas, las horas de Iago,
   qué actividades le molestan) vive SOLO en Dropbox /Gimnasio.txt; sin ese fichero no hay bloque. La web marca
-  plazas libres (personas = aforo − libres; aforo = lo más alto de esa franja en esta semana y la siguiente).
+  plazas libres (personas = aforo − libres; aforo = lo más alto de ESA franja —mismo día de la semana y hora— en esta
+  semana y las dos siguientes; el 29-oct mezclar días dio «5 personas» donde no había nadie).
   Diagnóstico `gimnasio` (sin cupo) → Dropbox /Pruebas/Gimnasio (prueba).md.

@@ -86,6 +86,7 @@ def leer_semana(html):
             if not m:
                 continue
             dia = int(m.group(1))
+            dsem = util.sin_tildes(cab.get_text(" ", strip=True)).lower()[:3]      # lun, mar, mie, jue…
             for caja in li.select(".class-time-box"):
                 act = caja.select_one("a.horario")
                 horas = caja.select_one(".on-hover strong")
@@ -96,7 +97,7 @@ def leer_semana(html):
                 for sp in caja.find_all("span"):
                     if sp.get("class") and re.fullmatch(r"\s*\d+\s*", sp.get_text()):
                         num = int(sp.get_text())
-                franjas.append({"sala": sala, "dia": dia, "actividad": act.get_text(strip=True),
+                franjas.append({"sala": sala, "dia": dia, "dsem": dsem, "actividad": act.get_text(strip=True),
                                 "ini": _min(hm.group(1)), "fin": _min(hm.group(2)), "libres": num or 0})
     return franjas
 
@@ -136,14 +137,18 @@ def _nombre_clase(act):
 
 def apuntados(semana, siguiente):
     """El número de la web son PLAZAS LIBRES (28-oct-2026: en la app, spinning 18:00 marcaba 12 con 6 caras
-    y 20:00 marcaba 9 con 9 caras; aforo 18). Las personas apuntadas = aforo − libres. El aforo de cada franja
-    es lo más alto que marca esa misma actividad y hora en esta semana y la siguiente (casi vacía)."""
+    y 20:00 marcaba 9 con 9 caras; aforo 18; 29-oct: entrenamiento personal 19:00 marcaba 3 con 12 caras,
+    aforo 15). Personas apuntadas = aforo − libres.
+    El aforo de cada franja es lo más alto que marca ESA MISMA franja (misma actividad, mismo día de la semana
+    y misma hora) en esta semana y las siguientes, que están casi vacías. OJO: no se mezclan días distintos:
+    el 29-oct salió «5 personas» en el entrenamiento personal del jueves a las 11 porque se tomó el aforo del
+    lunes (15) y el del jueves es 10, sin nadie apuntado."""
+    clave = lambda f: (f["actividad"].lower(), f.get("dsem"), f["ini"], f["fin"])
     aforo = {}
     for f in semana + siguiente:
-        k = (f["actividad"].lower(), f["ini"], f["fin"])
-        aforo[k] = max(aforo.get(k, 0), f["libres"])
+        aforo[clave(f)] = max(aforo.get(clave(f), 0), f["libres"])
     for f in semana:
-        f["aforo"] = aforo[(f["actividad"].lower(), f["ini"], f["fin"])]
+        f["aforo"] = aforo[clave(f)]
         f["personas"] = max(0, f["aforo"] - f["libres"])
     return semana
 
@@ -332,12 +337,16 @@ def texto_de_hoy(token, hoy):
     html = util.descargar(web, timeout=30, etiqueta="la web de reservas del gimnasio")
     franjas = leer_semana(html)
     siguiente, avisos = [], []
-    try:
-        url2 = enlace_siguiente(html, web)
-        if url2:
-            siguiente = leer_semana(util.descargar(url2, timeout=30, etiqueta="la semana siguiente del gimnasio"))
+    try:                                    # las dos semanas siguientes (casi vacías) dan el aforo de cada franja
+        pagina, url = html, web
+        for _ in range(2):
+            url = enlace_siguiente(pagina, url)
+            if not url:
+                break
+            pagina = util.descargar(url, timeout=30, etiqueta="la semana siguiente del gimnasio")
+            siguiente += leer_semana(pagina)
     except Exception as e:
-        avisos.append(f"Gimnasio: no se pudo leer la semana siguiente ({type(e).__name__}); el aforo sale solo de esta")
+        avisos.append(f"Gimnasio: no se pudieron leer las semanas siguientes ({type(e).__name__}); el aforo sale de lo que haya")
     if util.sin_tildes(aj.get("numero de la web", "plazas libres").lower()).startswith("apuntad"):
         for f in franjas:
             f["personas"] = f["libres"]
