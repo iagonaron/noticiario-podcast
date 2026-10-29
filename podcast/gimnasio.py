@@ -344,14 +344,13 @@ def solo_la_hora(frase):
     return "Gimnasio: hoy abajo está complicado toda la mañana." if frase else ""
 
 
-def toca_hiit(aj):
-    """¿El entreno que toca hoy lleva HIIT? Lo mira en la app de entreno (Supabase, solo lectura): el día
-    siguiente al último registrado. Las claves viven en Dropbox (/Gimnasio.txt), no aquí."""
+def dia_que_toca(aj):
+    """Qué día del ciclo toca hoy (1…N): el siguiente al último entreno registrado en la app (Supabase, solo
+    lectura). Las claves viven en Dropbox (/Gimnasio.txt), no aquí. Devuelve (día o None, nota)."""
     url, clave = aj.get("entreno url"), aj.get("entreno clave")
-    dias_hiit = {int(x) for x in re.findall(r"\d+", aj.get("dias con hiit", "1, 4"))}
     num = int(aj.get("dias del ciclo", "6"))
     if not url or not clave:
-        return None, "Gimnasio: sin «entreno url/clave» no se mira si toca HIIT"
+        return None, "Gimnasio: sin «entreno url/clave» no se mira qué entreno toca"
     import requests
     r = requests.get(url.rstrip("/") + "/rest/v1/ironbike_sesiones",
                      params={"select": "dia_ciclo,fecha", "dia_ciclo": f"gte.1", "order": "fecha.desc,id.desc", "limit": "1"},
@@ -360,7 +359,27 @@ def toca_hiit(aj):
     filas = r.json()
     ultimo = filas[0]["dia_ciclo"] if filas else 0
     hoy_toca = (ultimo % num) + 1 if ultimo else 1
-    return hoy_toca in dias_hiit, f"Gimnasio: último entreno D{ultimo} ({filas[0]['fecha'] if filas else '-'}) → hoy D{hoy_toca}"
+    return hoy_toca, f"Gimnasio: último entreno D{ultimo} ({filas[0]['fecha'] if filas else '-'}) → hoy D{hoy_toca}"
+
+
+def toca_hiit(aj, dia=None):
+    """¿El entreno que toca hoy lleva HIIT? (None si no se sabe qué día toca)."""
+    if dia is None:
+        dia, nota = dia_que_toca(aj)
+    else:
+        nota = f"Gimnasio: hoy D{dia}"
+    if dia is None:
+        return None, nota
+    return dia in {int(x) for x in re.findall(r"\d+", aj.get("dias con hiit", "1, 4"))}, nota
+
+
+def minutos_abajo(aj, dia):
+    """Cuánto rato estará abajo ese día del ciclo («abajo por dia: D2 1:00; D5 1:00» en /Gimnasio.txt). Los días
+    que no salen ahí usan «mi franja principal». Devuelve minutos o None."""
+    for d, hm in re.findall(r"D?\s*(\d+)\s*[=:]?\s*(\d{1,2}[:.]\d{2})", aj.get("abajo por dia", "")):
+        if dia is not None and int(d) == dia:
+            return _min(hm)
+    return None
 
 
 def texto_de_hoy(token, hoy):
@@ -391,12 +410,18 @@ def texto_de_hoy(token, hoy):
             f["personas"] = f["libres"]
     else:
         apuntados(franjas, siguiente)
-    hiit = False
+    hiit, dia = False, None
     try:
-        hiit, nota = toca_hiit(aj)
-        if hiit is None:
+        dia, nota = dia_que_toca(aj)
+        if dia is None:
             avisos.append(nota)
+        hiit, _ = toca_hiit(aj, dia) if dia is not None else (None, "")
         diag_hiit = [nota]
+        rato = minutos_abajo(aj, dia)
+        if rato:          # ese día todo el entreno es abajo: la franja que se protege dura más (29-oct-2026)
+            p_ini, p_fin = _tramo(aj["mi franja principal"])
+            aj["mi franja principal"] = f"{_hh(p_ini)}-{_hh(p_ini + rato)}"
+            diag_hiit.append(f"Gimnasio: hoy D{dia}, abajo {rato} min → franja {aj['mi franja principal']}")
     except Exception as e:
         diag_hiit = []
         avisos.append(f"Gimnasio: no se pudo mirar qué entreno toca ({type(e).__name__})")

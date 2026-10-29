@@ -74,4 +74,6 @@
   qué actividades le molestan) vive SOLO en Dropbox /Gimnasio.txt; sin ese fichero no hay bloque. La web marca
   plazas libres (personas = aforo − libres; aforo = lo más alto de ESA franja —mismo día de la semana y hora— en esta
   semana y las dos siguientes; el 29-oct mezclar días dio «5 personas» donde no había nadie).
+  Días con todo el entreno abajo (29-oct-2026): «abajo por día: D2 1:00; D5 1:00» en /Gimnasio.txt alarga la franja
+  protegida ese día del ciclo (`gimnasio.minutos_abajo`; el día sale de `dia_que_toca`, igual que el HIIT).
   Diagnóstico `gimnasio` (sin cupo) → Dropbox /Pruebas/Gimnasio (prueba).md.
