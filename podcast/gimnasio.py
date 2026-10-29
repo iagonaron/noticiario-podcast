@@ -256,39 +256,78 @@ def resumen(franjas, hoy, aj, hiit=False):
     return frase, diag
 
 
-def tabla(franjas, hoy, aj):
-    """Tablita para el final del guion escrito: por franjas, lo que pasa en cada zona y cuánta gente."""
+def _corto(a):
+    return (re.sub(r"\s*\(Musc\)", " (musc.)", re.sub(r"\s*\(Spin\)", " (spin)", a))
+            .replace("Super Clase Combinada", "Superclase").replace("Entrenamiento Personal", "Entreno personal")
+            .replace("Spinning Clase Virtual", "Spinning virtual"))
+
+
+def filas_tabla(franjas, hoy, aj):
+    """Las filas de la tabla por franjas: [{ini, fin, mia, grupo, abajo, spin, sala}] (textos ya cortos)."""
     del_dia = [f for f in franjas if f["dia"] == hoy.day]
     v_ini, v_fin = _tramo(aj["miro desde-hasta"])
     p_ini, p_fin = _tramo(aj["mi franja principal"])
     abajo_t, spin_t, sala_t = _lista(aj["molestan abajo"]), _lista(aj["spinning"]), _lista(aj["salas de maquinas"])
     zonas = [f for f in del_dia if _solapa(f, v_ini, v_fin) and (_es(f, abajo_t) or _es(f, spin_t) or _es(f, sala_t))]
     if not zonas:
-        return ""
+        return []
     cortes = sorted({v_ini, v_fin} | {f["ini"] for f in zonas if v_ini < f["ini"] < v_fin}
                     | {f["fin"] for f in zonas if v_ini < f["fin"] < v_fin})
-    corto = lambda a: (re.sub(r"\s*\(Musc\)", " (musc.)", re.sub(r"\s*\(Spin\)", " (spin)", a))
-                       .replace("Super Clase Combinada", "Superclase").replace("Entrenamiento Personal", "Entreno personal")
-                       .replace("Spinning Clase Virtual", "Spinning virtual"))
-    filas = ["| Franja | Abajo (fuerza) | Spinning | Por libre (sala) |", "|---|---|---|---|"]
-    crudas = []
+    celda = lambda L: " · ".join(f"{_corto(f['actividad'])} {f['personas']}" for f in L) or "—"
+    salida = []
     for a, b in zip(cortes, cortes[1:]):
         ab = [f for f in zonas if _es(f, abajo_t) and _solapa(f, a, b) and f["personas"] >= 1]
         sp = [f for f in zonas if _es(f, spin_t) and _solapa(f, a, b)]
-        sl = sum(f["personas"] for f in zonas if _es(f, sala_t) and _solapa(f, a, b))
-        celda = lambda L: " · ".join(f"{corto(f['actividad'])} {f['personas']}" for f in L) or "—"
-        marca = " ⭐" if _solapa({"ini": a, "fin": b}, p_ini, p_fin) else ""
-        grupo = any(f["personas"] >= 2 for f in ab)
-        fila = [a, b, marca, ('⚠️ ' if grupo else '') + celda(ab), celda(sp), sl]
-        if crudas and crudas[-1][2:] == fila[2:] and crudas[-1][1] == a:
-            crudas[-1][1] = b                      # igual que la anterior: se juntan
+        fila = {"ini": _hh(a), "fin": _hh(b), "mia": _solapa({"ini": a, "fin": b}, p_ini, p_fin),
+                "grupo": any(f["personas"] >= 2 for f in ab), "abajo": celda(ab), "spin": celda(sp),
+                "sala": sum(f["personas"] for f in zonas if _es(f, sala_t) and _solapa(f, a, b))}
+        igual = salida and all(salida[-1][k] == fila[k] for k in ("mia", "grupo", "abajo", "spin", "sala"))
+        if igual and salida[-1]["fin"] == fila["ini"]:
+            salida[-1]["fin"] = fila["fin"]            # igual que la anterior: se juntan
         else:
-            crudas.append(fila)
-    for a, b, marca, c1, c2, sl in crudas:
-        filas.append(f"| {_hh(a)}–{_hh(b)}{marca} | {c1} | {c2} | {sl} |")
-    return ("\n\n## 🏋️ Gimnasio hoy\n\n" + "\n".join(filas)
+            salida.append(fila)
+    return salida
+
+
+def tabla(filas):
+    """Tabla en Markdown para el final del guion escrito."""
+    if not filas:
+        return ""
+    lineas = ["| Franja | Abajo (fuerza) | Spinning | Por libre (sala) |", "|---|---|---|---|"]
+    for f in filas:
+        lineas.append(f"| {f['ini']}–{f['fin']}{' ⭐' if f['mia'] else ''} | {'⚠️ ' if f['grupo'] else ''}{f['abajo']} | "
+                      f"{f['spin']} | {f['sala']} |")
+    return ("\n\n## 🏋️ Gimnasio hoy\n\n" + "\n".join(lineas)
             + "\n\n_Número = personas apuntadas. ⭐ tu franja de siempre · ⚠️ clase de grupo abajo · "
               "«Por libre» = reservas de sala de máquinas + tarifa reducida (contándote a ti si reservaste)._\n")
+
+
+def lineas_correo(filas):
+    """Lo mismo, una franja por línea: el correo no dibuja tablas (29-oct-2026)."""
+    out = []
+    for f in filas:
+        marca = (("⭐" if f["mia"] else "") + ("⚠️" if f["grupo"] else "")) or "▫️"
+        abajo = "libre" if f["abajo"] == "—" else f["abajo"]
+        spin = "libre" if f["spin"] == "—" else f["spin"]
+        out.append(f"{marca} {f['ini']}–{f['fin']} · Abajo: {abajo} · Bici: {spin} · Por libre: {f['sala']}")
+    return "\n".join(out)
+
+
+def publicar_en_app(aj, hoy, frase, filas):
+    """La tabla del día, a la app de entreno (Supabase, ironbike_gimnasio), para verla bonita en
+    https://entreno-ironbike.netlify.app/#gimnasio (el enlace va en el correo)."""
+    url, clave = aj.get("entreno url"), aj.get("entreno clave")
+    if not url or not clave:
+        return "sin claves"
+    import requests
+    r = requests.post(url.rstrip("/") + "/rest/v1/ironbike_gimnasio", params={"on_conflict": "fecha"},
+                      json={"fecha": hoy.isoformat(), "frase": frase, "filas": filas},
+                      headers={"apikey": clave, "Authorization": f"Bearer {clave}", "Content-Type": "application/json",
+                               "Prefer": "resolution=merge-duplicates,return=minimal"}, timeout=20)
+    return "ok" if r.status_code < 300 else f"HTTP {r.status_code}"
+
+
+PARA_CORREO = ""        # frase + franjas en líneas + enlace (lo escribe main.py en Dropbox /Gimnasio hoy.md)
 
 
 def solo_la_hora(frase):
@@ -363,4 +402,12 @@ def texto_de_hoy(token, hoy):
         avisos.append(f"Gimnasio: no se pudo mirar qué entreno toca ({type(e).__name__})")
     texto, diag = resumen(franjas, hoy, aj, hiit=bool(hiit))
     diag = diag_hiit + diag
-    return texto, tabla(franjas, hoy, aj), diag + [f"Gimnasio: {len(franjas)} franjas esta semana y {len(siguiente)} la siguiente"], avisos
+    filas = filas_tabla(franjas, hoy, aj)
+    global PARA_CORREO
+    PARA_CORREO = (f"{texto}\n\n{lineas_correo(filas)}\n\n⭐ tu franja · ⚠️ clase de grupo abajo · números = personas apuntadas"
+                   f"\n📊 Tabla: https://entreno-ironbike.netlify.app/#gimnasio") if filas else texto
+    try:
+        diag.append(f"Gimnasio: tabla a la app → {publicar_en_app(aj, hoy, texto, filas)}")
+    except Exception as e:
+        avisos.append(f"Gimnasio: no se pudo subir la tabla a la app ({type(e).__name__})")
+    return texto, tabla(filas), diag + [f"Gimnasio: {len(franjas)} franjas esta semana y {len(siguiente)} las siguientes"], avisos

@@ -215,7 +215,7 @@ def main():
             if tabla_gym and not config.PRUEBA:
                 # ya, al principio: el correo «Ocupación GYM y repositorios» (7:42) la lee de Dropbox
                 dropbox.subir(token, config.DROPBOX_GIMNASIO_HOY,
-                              f"# Gimnasio · {hoy.isoformat()}\n\n{info_gym}\n{tabla_gym}".encode("utf-8"))
+                              f"# Gimnasio · {hoy.isoformat()}\n\n{gimnasio.PARA_CORREO or info_gym}\n".encode("utf-8"))
         except Exception as e:
             avisos.append(f"Gimnasio: {type(e).__name__}: {str(e)[:200]}")
 

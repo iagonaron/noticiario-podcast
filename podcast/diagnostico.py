@@ -789,7 +789,8 @@ def gimnasio():
     from . import dropbox, gimnasio as g, util
     token = dropbox.token_acceso()
     texto, tabla, diag, avisos = g.texto_de_hoy(token, util.ahora().date())
-    md = f"# Gimnasio · prueba {util.ahora():%Y-%m-%d %H:%M}\n\n{texto or '(sin texto)'}\n{tabla}\n\n" + "\n".join(diag + avisos)
+    md = (f"# Gimnasio · prueba {util.ahora():%Y-%m-%d %H:%M}\n\n{texto or '(sin texto)'}\n{tabla}\n\n## Correo\n\n"
+          f"{g.PARA_CORREO}\n\n" + "\n".join(diag + avisos))
     dropbox.subir(token, "/Pruebas/Gimnasio (prueba).md", md.encode("utf-8-sig"))
     nota("Gimnasio", f"Hecho: {len(texto)} caracteres de texto, tabla {'sí' if tabla else 'no'}, {len(avisos)} avisos "
          "(el detalle, en Dropbox /Pruebas)")
