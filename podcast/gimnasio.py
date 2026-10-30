@@ -11,8 +11,8 @@ Qué cuenta, en este orden de importancia (lo pidió así el 28-oct-2026):
    personal y la combinada de musculación). Primero se busca la hora de empezar más cercana con abajo libre
    DEL TODO, sin nadie apuntado, dentro de «libre del todo entre» (30-oct-2026: «prefiero que si hay una hora libre del todo ir a esa hora»;
    ese día un entrenamiento personal de 1 persona a las 11:00 le pisaba la pierna y lo bueno era 10:00-11:00).
-   Si en toda la mañana no hay un hueco así, vale con que no haya clases de 2 o más (las que acaparan
-   las máquinas). El spinning no cuenta aquí: es otra sala.
+   Los días de HIIT esa hora también deja libre la bici de spinning al final. Si no hay una hora así, no se
+   elige otra: se dice qué lo impide y que mire el correo (las franjas) y decida él.
 2. Spinning a partir de cierta hora («spinning desde»): los días de HIIT quiere la bici de spinning.
 3. Cuánta gente entrenará por libre a esa hora (reservas de sala de máquinas + tarifa reducida), sin contarle a él.
 """
@@ -191,7 +191,6 @@ def resumen(franjas, hoy, aj, hiit=False):
 
     abajo = [f for f in del_dia if _es(f, abajo_t) and f["personas"] >= 1 and _solapa(f, v_ini, v_fin)]
     todas = _juntar(abajo)                                           # abajo libre del todo (lo que prefiere)
-    grupo = _juntar([f for f in abajo if f["personas"] >= 2])        # 2 o más acaparan las máquinas de abajo
     spin = _juntar([f for f in del_dia if _es(f, spin_t) and f["personas"] >= 1])   # clase con gente = sin bici
     molesta = todas
 
@@ -215,9 +214,8 @@ def resumen(franjas, hoy, aj, hiit=False):
     # quiero acabar haciendo spinning… me interesa especialmente que no haya spinning al final»).
     fuerza = next((x for x in candidatas if l_ini <= x and x + duracion <= l_fin
                    and not choque_fuerza(x) and not choque_bici(x)), None)
-    if fuerza is None:                     # ningún hueco libre del todo: basta con que no haya clases de 2 o más
-        molesta = grupo
-        fuerza = next((x for x in candidatas if not choque_fuerza(x)), None)
+    # Sin esa hora libre del todo, no se elige otra (30-oct-2026: «prefiero que me lo diga… diciendo por qué…
+    # que mire el correo y decida yo»): se dice qué lo impide y él decide con la tabla.
     elegido, sin_bici = fuerza, False
     if fuerza is not None and choque_bici(fuerza):
         # la bici es menos importante: solo se mueve la hora como mucho «mover por la bici» minutos más
@@ -251,8 +249,13 @@ def resumen(franjas, hoy, aj, hiit=False):
             bici = "y para el HIIT tendrás la bici de spinning libre"
 
     if elegido is None:
-        frase = "Gimnasio: hoy abajo está complicado toda la mañana: " + util.lista_hablada(
-            [clase(f) for f in grupo]) + "."
+        porque = [clase(f) + " abajo" for f in todas if _solapa(f, l_ini, l_fin)]
+        if hiit:
+            porque += [clase(f) + " en la sala de bicis" for f in spin
+                       if _solapa(f, l_ini + h_desde, l_fin - duracion + h_hasta)]
+        frase = (f"Gimnasio: hoy no hay una hora libre del todo entre las {_hh(l_ini)} y las {_hh(l_fin)}"
+                 + (", porque hay " + util.lista_hablada(porque) if porque else "")
+                 + ". Mira las franjas y decide tú.")
     elif elegido == p_ini:
         frase = f"Gimnasio: puedes ir a tu hora, a las {_hh(p_ini)}"
     else:
@@ -355,7 +358,10 @@ def solo_la_hora(frase):
         elif "no tendrás bici de spinning" in frase:
             bici = "; hoy no habrá bici de spinning para el HIIT"
         return f"Gimnasio: {m.group(1)}{bici}."
-    return "Gimnasio: hoy abajo está complicado toda la mañana." if frase else ""
+    m = re.match(r"Gimnasio: (hoy no hay una hora libre del todo entre las [\d:]+ y las [\d:]+)", frase or "")
+    if m:
+        return f"Gimnasio: {m.group(1)}; mira el correo y decide tú."
+    return ""
 
 
 def dia_que_toca(aj):

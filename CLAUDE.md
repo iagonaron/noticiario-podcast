@@ -80,9 +80,9 @@
   semana y las dos siguientes; el 29-oct mezclar días dio «5 personas» donde no había nadie).
   Días con todo el entreno abajo (29-oct-2026): «abajo por día: D2 1:00; D5 1:00» en /Gimnasio.txt alarga la franja
   protegida ese día del ciclo (`gimnasio.minutos_abajo`; el día sale de `dia_que_toca`, igual que el HIIT).
-  Abajo libre del todo (30-oct-2026): primero se busca la hora más cercana sin NADIE apuntado a lo de «molestan abajo»
-  (un entrenamiento personal de 1 ya cuenta); solo si no hay hueco así en la mañana vale con que no haya clases de 2+.
-  Ese hueco libre del todo solo se busca dentro de «libre del todo entre» (/Gimnasio.txt; él: de 10 a 12).
+  Abajo libre del todo (30-oct-2026): se busca la hora más cercana sin NADIE apuntado a lo de «molestan abajo»
+  (un entrenamiento personal de 1 ya cuenta), solo dentro de «libre del todo entre» (/Gimnasio.txt; él: de 10 a 12).
+  Si no la hay, NO se propone otra: «hoy no hay una hora libre del todo…, porque hay X» y que mire el correo y decida.
   Los días de HIIT, ese hueco ideal también exige la bici de spinning libre al final. Fuera de eso, el spinning
   no cuenta para abajo. Desde el 30-oct la franja principal dura 1 h todos los días (el entreno entero abajo libre).
   Diagnóstico `gimnasio` (sin cupo) → Dropbox /Pruebas/Gimnasio (prueba).md.
