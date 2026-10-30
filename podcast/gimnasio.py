@@ -7,9 +7,12 @@ en /Gimnasio.txt (el repositorio es público). Aquí solo está la forma de leer
 En esa página, cada franja trae un número junto a un icono de persona: son las PLAZAS LIBRES (ver `apuntados`).
 
 Qué cuenta, en este orden de importancia (lo pidió así el 28-oct-2026):
-1. Fuerza principal abajo en su franja: le molestan las clases de grupo de abajo («molestan abajo»);
-   con 2 o más personas acaparan las máquinas de abajo; con 1 es un entrenamiento individual (se dice,
-   pero no molesta). Si la franja choca, se busca la hora de empezar libre más cercana.
+1. Fuerza principal abajo en su franja: le molestan las clases de abajo («molestan abajo»: entrenamiento
+   personal y la combinada de musculación). Primero se busca la hora de empezar más cercana con abajo libre
+   DEL TODO, sin nadie apuntado (30-oct-2026: «prefiero que si hay una hora libre del todo ir a esa hora»;
+   ese día un entrenamiento personal de 1 persona a las 11:00 le pisaba la pierna y lo bueno era 10:00-11:00).
+   Si en toda la mañana no hay un hueco así, vale con que no haya clases de 2 o más (las que acaparan
+   las máquinas). El spinning no cuenta aquí: es otra sala.
 2. Spinning a partir de cierta hora («spinning desde»): los días de HIIT quiere la bici de spinning.
 3. Cuánta gente entrenará por libre a esa hora (reservas de sala de máquinas + tarifa reducida), sin contarle a él.
 """
@@ -187,11 +190,13 @@ def resumen(franjas, hoy, aj, hiit=False):
     descontar = util.sin_tildes(aj.get("descontarme en sala de maquinas", "si").lower()).startswith("s")
 
     abajo = [f for f in del_dia if _es(f, abajo_t) and f["personas"] >= 1 and _solapa(f, v_ini, v_fin)]
+    todas = _juntar(abajo)                                           # abajo libre del todo (lo que prefiere)
     grupo = _juntar([f for f in abajo if f["personas"] >= 2])        # 2 o más acaparan las máquinas de abajo
     spin = _juntar([f for f in del_dia if _es(f, spin_t) and f["personas"] >= 1])   # clase con gente = sin bici
+    molesta = todas
 
     def choque_fuerza(ini):
-        return [f for f in grupo if _solapa(f, ini, ini + duracion)]
+        return [f for f in molesta if _solapa(f, ini, ini + duracion)]
 
     def choque_bici(ini):
         return [f for f in spin if _solapa(f, ini + h_desde, ini + h_hasta)] if hiit else []
@@ -204,6 +209,9 @@ def resumen(franjas, hoy, aj, hiit=False):
     candidatas = [p_ini] + [x for paso in range(5, 241, 5) for x in (p_ini - paso, p_ini + paso)
                             if v_ini <= x and x + duracion <= v_fin]
     fuerza = next((x for x in candidatas if not choque_fuerza(x)), None)        # lo primero: la fuerza
+    if fuerza is None:                     # ningún hueco libre del todo: basta con que no haya clases de 2 o más
+        molesta = grupo
+        fuerza = next((x for x in candidatas if not choque_fuerza(x)), None)
     elegido, sin_bici = fuerza, False
     if fuerza is not None and choque_bici(fuerza):
         # la bici es menos importante: solo se mueve la hora como mucho «mover por la bici» minutos más
