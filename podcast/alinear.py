@@ -119,7 +119,7 @@ _ULTIMAS = {"palabras": []}
 
 # La etiqueta de pausa entre turnos («<long pause>») a veces se lee en voz alta: «long pause», «pause» o,
 # traducida, «pausa larga» (Iago lo oyó varios días a finales de oct-2026).
-ETIQUETA = {"long", "pause", "pausa", "larga", "pausas"}
+ETIQUETA = {"long", "pause", "pausa", "larga", "largo", "pausas"}   # «largo»: Whisper oye así a veces «larga»
 
 
 def _etiquetas_oidas(rec, turnos):
