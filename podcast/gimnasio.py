@@ -211,7 +211,10 @@ def resumen(franjas, hoy, aj, hiit=False):
     # Libre del todo, solo dentro de «libre del todo entre» (30-oct-2026: «si entre las 10 y las 12 hay una hora
     # libre sin gente, esa es la que quiero»); si no, se mira toda la mañana con la regla de 2 o más.
     l_ini, l_fin = _tramo(aj.get("libre del todo entre") or aj["miro desde-hasta"])
-    fuerza = next((x for x in candidatas if l_ini <= x and x + duracion <= l_fin and not choque_fuerza(x)), None)
+    # Los días de HIIT, la hora ideal también deja libre la bici de spinning al final (30-oct-2026: «en empuje
+    # quiero acabar haciendo spinning… me interesa especialmente que no haya spinning al final»).
+    fuerza = next((x for x in candidatas if l_ini <= x and x + duracion <= l_fin
+                   and not choque_fuerza(x) and not choque_bici(x)), None)
     if fuerza is None:                     # ningún hueco libre del todo: basta con que no haya clases de 2 o más
         molesta = grupo
         fuerza = next((x for x in candidatas if not choque_fuerza(x)), None)

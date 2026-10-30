@@ -83,5 +83,6 @@
   Abajo libre del todo (30-oct-2026): primero se busca la hora más cercana sin NADIE apuntado a lo de «molestan abajo»
   (un entrenamiento personal de 1 ya cuenta); solo si no hay hueco así en la mañana vale con que no haya clases de 2+.
   Ese hueco libre del todo solo se busca dentro de «libre del todo entre» (/Gimnasio.txt; él: de 10 a 12).
-  El spinning no cuenta para abajo. Los días de pierna (D3, D6) también protegen 60 min («abajo por día»).
+  Los días de HIIT, ese hueco ideal también exige la bici de spinning libre al final. Fuera de eso, el spinning
+  no cuenta para abajo. Desde el 30-oct la franja principal dura 1 h todos los días (el entreno entero abajo libre).
   Diagnóstico `gimnasio` (sin cupo) → Dropbox /Pruebas/Gimnasio (prueba).md.
