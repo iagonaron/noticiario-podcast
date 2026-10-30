@@ -9,7 +9,7 @@ En esa página, cada franja trae un número junto a un icono de persona: son las
 Qué cuenta, en este orden de importancia (lo pidió así el 28-oct-2026):
 1. Fuerza principal abajo en su franja: le molestan las clases de abajo («molestan abajo»: entrenamiento
    personal y la combinada de musculación). Primero se busca la hora de empezar más cercana con abajo libre
-   DEL TODO, sin nadie apuntado (30-oct-2026: «prefiero que si hay una hora libre del todo ir a esa hora»;
+   DEL TODO, sin nadie apuntado, dentro de «libre del todo entre» (30-oct-2026: «prefiero que si hay una hora libre del todo ir a esa hora»;
    ese día un entrenamiento personal de 1 persona a las 11:00 le pisaba la pierna y lo bueno era 10:00-11:00).
    Si en toda la mañana no hay un hueco así, vale con que no haya clases de 2 o más (las que acaparan
    las máquinas). El spinning no cuenta aquí: es otra sala.
@@ -208,7 +208,10 @@ def resumen(franjas, hoy, aj, hiit=False):
     # los días de HIIT, además, si tendrá la bici de spinning. Primero la fuerza; la bici, si se puede.
     candidatas = [p_ini] + [x for paso in range(5, 241, 5) for x in (p_ini - paso, p_ini + paso)
                             if v_ini <= x and x + duracion <= v_fin]
-    fuerza = next((x for x in candidatas if not choque_fuerza(x)), None)        # lo primero: la fuerza
+    # Libre del todo, solo dentro de «libre del todo entre» (30-oct-2026: «si entre las 10 y las 12 hay una hora
+    # libre sin gente, esa es la que quiero»); si no, se mira toda la mañana con la regla de 2 o más.
+    l_ini, l_fin = _tramo(aj.get("libre del todo entre") or aj["miro desde-hasta"])
+    fuerza = next((x for x in candidatas if l_ini <= x and x + duracion <= l_fin and not choque_fuerza(x)), None)
     if fuerza is None:                     # ningún hueco libre del todo: basta con que no haya clases de 2 o más
         molesta = grupo
         fuerza = next((x for x in candidatas if not choque_fuerza(x)), None)

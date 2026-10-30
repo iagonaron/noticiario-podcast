@@ -82,5 +82,6 @@
   protegida ese día del ciclo (`gimnasio.minutos_abajo`; el día sale de `dia_que_toca`, igual que el HIIT).
   Abajo libre del todo (30-oct-2026): primero se busca la hora más cercana sin NADIE apuntado a lo de «molestan abajo»
   (un entrenamiento personal de 1 ya cuenta); solo si no hay hueco así en la mañana vale con que no haya clases de 2+.
-  El spinning no cuenta para abajo. Pierna A (D3) también protege 60 min («abajo por día» en /Gimnasio.txt).
+  Ese hueco libre del todo solo se busca dentro de «libre del todo entre» (/Gimnasio.txt; él: de 10 a 12).
+  El spinning no cuenta para abajo. Los días de pierna (D3, D6) también protegen 60 min («abajo por día»).
   Diagnóstico `gimnasio` (sin cupo) → Dropbox /Pruebas/Gimnasio (prueba).md.
