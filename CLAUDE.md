@@ -28,6 +28,10 @@
   (`alinear.cortes` y `voces._razonable`) no cuentan los silencios hondos (≥40 dB bajo la voz), que el
   montaje quita igual (`alinear._hablado`). Los lotes rechazados también se guardan en el crudo
   («rechazado»: motivo), para estudiarlos con `recortar` o `pausas`.
+- Etiqueta de pausa leída (30-oct-2026): la voz decía a veces «long pause», «pause» o «pausa larga». Ahora
+  `alinear.cortes` busca esas palabras fuera de lo que dice cada turno y recorta el trozo antes (o después) de
+  ellas; solo si queda alguna dentro de una frase se pide otra vez el lote (`etiqueta_sin_quitar`). El resumen
+  del lote dice «N palabras de la etiqueta de pausa recortadas».
 - Bordes de cada frase (16-oct-2026): lo que suena antes de la primera palabra o después de la
   última sin ser del guion (sílaba suelta, respiración, etiqueta a medio leer), corto y separado por
   un silencio, se quita (`alinear._limpiar`). El resumen de cada lote dice cuántos «bordes limpiados».

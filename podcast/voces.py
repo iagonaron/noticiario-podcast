@@ -565,7 +565,7 @@ def _voz_con_modelo(via, modelo, clave, lotes):
                                "textos": [t for _, t in lote], "tramos": [], "resumen": f"rechazado: {e}"[:300],
                                "wav": wav})
                 raise
-            leida = bool(tanda["pausas"] and alinear.se_oye("long pause"))
+            leida = bool(tanda["pausas"] and alinear.etiqueta_sin_quitar())   # leída y sin poder recortarla
             CRUDOS.append({"voz": clave, "modelo": modelo, "via": via, "pausas": bool(tanda["pausas"]),
                            "leyo_etiqueta": leida, "indices": [i for i, _ in lote], "textos": [t for _, t in lote],
                            "tramos": [[float(a), float(b)] for a, b in tramos], "resumen": resumen, "wav": wav})

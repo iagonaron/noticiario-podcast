@@ -117,6 +117,24 @@ def _modelo():
 _ULTIMAS = {"palabras": []}
 
 
+# La etiqueta de pausa entre turnos («<long pause>») a veces se lee en voz alta: «long pause», «pause» o,
+# traducida, «pausa larga» (Iago lo oyó varios días a finales de oct-2026).
+ETIQUETA = {"long", "pause", "pausa", "larga", "pausas"}
+
+
+def _etiquetas_oidas(rec, turnos):
+    """Palabras de la etiqueta que se oyen FUERA de lo que dice cada turno (entre una frase y la siguiente):
+    las que forman parte del guion caen dentro de su turno y no cuentan."""
+    dentro = [(t["ini"], t["fin"]) for t in turnos if t]
+    return [(w, a, b) for w, a, b in rec
+            if w in ETIQUETA and not any(i - 0.02 <= a and b <= f + 0.02 for i, f in dentro)]
+
+
+def etiqueta_sin_quitar():
+    """¿Quedó alguna etiqueta leída que no se pudo recortar en el último lote cortado?"""
+    return _ULTIMAS.get("etiquetas", 0) > 0
+
+
 def se_oye(frase):
     """¿Aparece esa frase (p. ej. «long pause») en lo último que se transcribió?"""
     toks = norma(frase)
@@ -327,6 +345,7 @@ def cortes(wav_bytes, textos):
     sil, umbral = silencios(env, minimo_s=0.08)
     voz_ini = sil[0][1] if sil and sil[0][0] <= 0.02 else 0.0
     voz_fin = sil[-1][0] if sil and sil[-1][1] >= dur - 0.05 else dur
+    _ULTIMAS["etiquetas"] = 0
     if len(textos) == 1:
         return [(max(0.0, voz_ini - 0.05), min(dur, voz_fin + 0.15))], "un solo turno"
     rec = _palabras(x)
@@ -382,9 +401,27 @@ def cortes(wav_bytes, textos):
             a, b, q = _limpiar(env, umbral, sil, tramos[i][0], tramos[i][1], turnos[i])
             tramos[i] = (a, b)
             limpios += q
+    # la etiqueta leída en voz alta se recorta: va justo después de la última palabra de un turno o, a
+    # veces, justo antes de la primera del siguiente
+    oidas = _etiquetas_oidas(rec, turnos)
+    for w, s0, s1 in oidas:
+        for i, (a, b) in enumerate(tramos):
+            t = turnos[i]
+            if not t or s1 <= a or s0 >= b:
+                continue
+            if s0 >= t["fin"] - 0.02:
+                tramos[i] = (a, max(t["fin"] + 0.08, min(b, s0 - 0.04)))
+            elif s1 <= t["ini"] + 0.02:
+                tramos[i] = (min(t["ini"] - 0.08, max(a, s1 + 0.03)), b)
+    # las que siguen dentro de algún trozo no se han podido quitar (p. ej., en mitad de una frase)
+    sin_quitar = sum(1 for _, s0, s1 in oidas if any(s0 < b - 0.02 and s1 > a + 0.02 for a, b in tramos))
+    quitadas = len(oidas) - sin_quitar
+    _ULTIMAS["etiquetas"] = sin_quitar
     resumen = (f"{n} turnos · transcripción {'sí' if rec else 'no'} ({cobertura:.0%} de palabras) · "
                f"{sum(1 for f in fijos if f is not None)}/{n - 1} cortes fijados por la transcripción · "
-               f"{bordes} con palabras sin reconocer junto al corte · {limpios} bordes limpiados · {ritmo:.0f} letras/s")
+               f"{bordes} con palabras sin reconocer junto al corte · {limpios} bordes limpiados · {ritmo:.0f} letras/s"
+               + (f" · {quitadas} palabras de la etiqueta de pausa recortadas" if quitadas else "")
+               + (f" · {sin_quitar} sin poder recortar" if sin_quitar else ""))
     return tramos, resumen
 
 
