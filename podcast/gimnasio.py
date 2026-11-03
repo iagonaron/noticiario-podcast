@@ -483,8 +483,11 @@ def texto_de_hoy(token, hoy):
     diag = diag_hiit + diag
     filas = filas_tabla(franjas, hoy, aj)
     global PARA_CORREO
-    PARA_CORREO = (f"{texto}\n\n{lineas_correo(filas)}\n\n⭐ tu franja · ⚠️ clase de grupo abajo · números = personas apuntadas"
-                   f"\n📊 Tabla: https://entreno-ironbike.netlify.app/#gimnasio") if filas else texto
+    # En el correo, la hora recomendada en negrita (3-nov-2026, lo pidió Iago); la app y el pódcast, sin asteriscos
+    negrita = re.sub(r"(Lo mejor: ve a las [\d:]+|puedes ir a tu hora, a las [\d:]+|mejor ve (?:antes|más tarde), a las [\d:]+)",
+                     r"**\1**", texto, count=1)
+    PARA_CORREO = (f"{negrita}\n\n{lineas_correo(filas)}\n\n⭐ tu franja · ⚠️ clase de grupo abajo · números = personas apuntadas"
+                   f"\n📊 Tabla: https://entreno-ironbike.netlify.app/#gimnasio") if filas else negrita
     try:
         diag.append(f"Gimnasio: tabla a la app → {publicar_en_app(aj, hoy, texto, filas)}")
     except Exception as e:
