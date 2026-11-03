@@ -11,8 +11,9 @@ Qué cuenta, en este orden de importancia (lo pidió así el 28-oct-2026):
    personal y la combinada de musculación). Primero se busca la hora de empezar más cercana con abajo libre
    DEL TODO, sin nadie apuntado, dentro de «libre del todo entre» (30-oct-2026: «prefiero que si hay una hora libre del todo ir a esa hora»;
    ese día un entrenamiento personal de 1 persona a las 11:00 le pisaba la pierna y lo bueno era 10:00-11:00).
-   Los días de HIIT esa hora también deja libre la bici de spinning al final. Si no hay una hora así, no se
-   elige otra: se dice qué lo impide y que mire el correo (las franjas) y decida él.
+   Los días de HIIT esa hora también deja libre la bici de spinning al final. Si no hay una hora así, se dice
+   qué lo impide y se propone un plan partido (3-nov-2026): empezar en el hueco más largo con abajo libre, hacer
+   ahí lo de abajo, luego máquinas de arriba y al final la bici (`_plan_partido`).
 2. Spinning a partir de cierta hora («spinning desde»): los días de HIIT quiere la bici de spinning.
 3. Cuánta gente entrenará por libre a esa hora (reservas de sala de máquinas + tarifa reducida), sin contarle a él.
 """
@@ -254,8 +255,9 @@ def resumen(franjas, hoy, aj, hiit=False):
             porque += [clase(f) + " en la sala de bicis" for f in spin
                        if _solapa(f, l_ini + h_desde, l_fin - duracion + h_hasta)]
         frase = (f"Gimnasio: hoy no hay una hora libre del todo entre las {_hh(l_ini)} y las {_hh(l_fin)}"
-                 + (", porque hay " + util.lista_hablada(porque) if porque else "")
-                 + ". Mira las franjas y decide tú.")
+                 + (", porque hay " + util.lista_hablada(porque) if porque else ""))
+        plan = _plan_partido(todas, spin, l_ini, l_fin, p_ini, aj)
+        frase += (". " + plan) if plan else ". Mira las franjas y decide tú."
     elif elegido == p_ini:
         frase = f"Gimnasio: puedes ir a tu hora, a las {_hh(p_ini)}"
     else:
@@ -271,6 +273,35 @@ def resumen(franjas, hoy, aj, hiit=False):
     diag = ["Gimnasio: " + ", ".join(f"{f['actividad']} {_hh(f['ini'])}-{_hh(f['fin'])}={f['personas']}/{f.get('aforo')}"
                                    for f in sorted(del_dia, key=lambda f: f["ini"]) if _solapa(f, v_ini, v_fin))]
     return frase, diag
+
+
+def _plan_partido(abajo, spin, l_ini, l_fin, p_ini, aj):
+    """Sin hora libre del todo (3-nov-2026, lo pidió Iago): «si empiezo a las 10:30 hago la parte de abajo,
+    dejo para arriba los últimos ejercicios y por último bajo a hacer spinning». Se busca el hueco más largo
+    con abajo libre (sin nadie apuntado a lo que molesta) dentro de «libre del todo entre», de al menos
+    «abajo mínimo» (por defecto 0:30); si empatan, el más cercano a su hora. Ahí empieza y hace lo de abajo;
+    luego, máquinas de arriba; y al final la bici de spinning, si no hay clase con gente en ese rato."""
+    minimo = _min(aj.get("abajo minimo", "0:30"))
+    ocupado = sorted((max(f["ini"], l_ini), min(f["fin"], l_fin)) for f in abajo if _solapa(f, l_ini, l_fin))
+    huecos, t = [], l_ini
+    for a, b in ocupado:
+        if a > t:
+            huecos.append((t, a))
+        t = max(t, b)
+    if t < l_fin:
+        huecos.append((t, l_fin))
+    huecos = [h for h in huecos if h[1] - h[0] >= minimo]
+    if not huecos:
+        return ""
+    ini, fin = max(huecos, key=lambda h: (h[1] - h[0], -abs(h[0] - p_ini)))
+    s_ini, s_fin = _tramo(aj.get("mi sesion entera", "10:30-12:00"))
+    final = ini + (s_fin - s_ini)                                 # cuándo acabaría la sesión entera
+    b_ini = final - _min(aj.get("bici al final", "0:25"))
+    choca = [f for f in spin if _solapa(f, b_ini, final)]
+    bici = ("y al final, la bici de spinning, que estará libre" if not choca else
+            f"y al final, la bici, aunque habrá {_nombre_clase(choca[0]['actividad'])} con {choca[0]['personas']}")
+    return (f"Lo mejor: ve a las {_hh(ini)}, haz lo de abajo hasta las {_hh(fin)}, luego lo que puedas en las "
+            f"máquinas de arriba, {bici}.")
 
 
 def _corto(a):
@@ -358,6 +389,9 @@ def solo_la_hora(frase):
         elif "no tendrás bici de spinning" in frase:
             bici = "; hoy no habrá bici de spinning para el HIIT"
         return f"Gimnasio: {m.group(1)}{bici}."
+    m = re.search(r"Lo mejor: ve a las ([\d:]+), haz lo de abajo hasta las ([\d:]+)", frase or "")
+    if m:
+        return f"Gimnasio: ve a las {m.group(1)}; lo de abajo, hasta las {m.group(2)}, y luego arriba."
     m = re.match(r"Gimnasio: (hoy no hay una hora libre del todo entre las [\d:]+ y las [\d:]+)", frase or "")
     if m:
         return f"Gimnasio: {m.group(1)}; mira el correo y decide tú."
