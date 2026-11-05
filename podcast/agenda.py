@@ -131,14 +131,21 @@ def _lista(eventos, maximo):
     return "; ".join(trozos[:-1]) + ("; y " if len(trozos) > 1 else "") + trozos[-1] if trozos else ""
 
 
-# Eventos que solo se dicen el mismo día, no la víspera (Iago, 28-oct-2026: el Depor en Riazor solo le
-# importa ese día, para aparcar). Se comparan con el título en minúsculas y sin tildes.
-SOLO_EL_DIA = ("depor en riazor",)
+# Eventos que solo se dicen el mismo día, no la víspera. Se comparan con el título en minúsculas y sin tildes.
+# - Depor en Riazor (Iago, 28-oct-2026): solo le importa ese día, para aparcar.
+# - Avisos de grabación del lunes previo (Iago, 5-nov-2026): los pone la tarea de Espazos el lunes de la
+#   semana anterior a cada grabación sin contestar, y quiere oírlos ese lunes, no el domingo.
+SOLO_EL_DIA = ("depor en riazor", "decidir solicitud de grabacion", "grabacion sin respuesta del profesor")
+PARTIDO_RIAZOR = ("depor en riazor",)   # además, el aviso de no mover el coche
+
+
+def _coincide(e, claves):
+    t = util.sin_tildes(e.get("titulo") or "").lower()
+    return any(x in t for x in claves)
 
 
 def _solo_el_dia(e):
-    t = util.sin_tildes(e.get("titulo") or "").lower()
-    return any(x in t for x in SOLO_EL_DIA)
+    return _coincide(e, SOLO_EL_DIA)
 
 
 def texto_plantilla(eventos, problemas=None):
@@ -159,7 +166,7 @@ def texto_plantilla(eventos, problemas=None):
 def _aviso_aparcar(hoy):
     """Día de partido en Riazor: cerca de casa de Iago no hay dónde aparcar desde un rato antes hasta un rato
     después, así que mejor no mover el coche (lo pidió el 28-oct-2026)."""
-    partidos = [e for e in hoy if _solo_el_dia(e)]
+    partidos = [e for e in hoy if _coincide(e, PARTIDO_RIAZOR)]
     if not partidos:
         return ""
     e = partidos[0]
