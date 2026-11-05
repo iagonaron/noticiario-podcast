@@ -13,7 +13,7 @@ Qué cuenta, en este orden de importancia (lo pidió así el 28-oct-2026):
    ese día un entrenamiento personal de 1 persona a las 11:00 le pisaba la pierna y lo bueno era 10:00-11:00).
    Los días de HIIT esa hora también deja libre la bici de spinning al final. Si no hay una hora así, se dice
    qué lo impide y se propone un plan partido (3-nov-2026): empezar en el hueco más largo con abajo libre, hacer
-   ahí lo de abajo, luego máquinas de arriba y al final la bici (`_plan_partido`).
+   ahí lo de abajo, luego máquinas de arriba y, los días de HIIT, al final la bici (`_plan_partido`).
 2. Spinning a partir de cierta hora («spinning desde»): los días de HIIT quiere la bici de spinning.
 3. Cuánta gente entrenará por libre a esa hora (reservas de sala de máquinas + tarifa reducida), sin contarle a él.
 """
@@ -256,7 +256,7 @@ def resumen(franjas, hoy, aj, hiit=False):
                        if _solapa(f, l_ini + h_desde, l_fin - duracion + h_hasta)]
         frase = (f"Gimnasio: hoy no hay una hora libre del todo entre las {_hh(l_ini)} y las {_hh(l_fin)}"
                  + (", porque hay " + util.lista_hablada(porque) if porque else ""))
-        plan = _plan_partido(todas, spin, l_ini, l_fin, p_ini, aj)
+        plan = _plan_partido(todas, spin, l_ini, l_fin, p_ini, aj, hiit)
         frase += (". " + plan) if plan else ". Mira las franjas y decide tú."
     elif elegido == p_ini:
         frase = f"Gimnasio: puedes ir a tu hora, a las {_hh(p_ini)}"
@@ -275,12 +275,13 @@ def resumen(franjas, hoy, aj, hiit=False):
     return frase, diag
 
 
-def _plan_partido(abajo, spin, l_ini, l_fin, p_ini, aj):
+def _plan_partido(abajo, spin, l_ini, l_fin, p_ini, aj, hiit=False):
     """Sin hora libre del todo (3-nov-2026, lo pidió Iago): «si empiezo a las 10:30 hago la parte de abajo,
     dejo para arriba los últimos ejercicios y por último bajo a hacer spinning». Se busca el hueco más largo
     con abajo libre (sin nadie apuntado a lo que molesta) dentro de «libre del todo entre», de al menos
     «abajo mínimo» (por defecto 0:30); si empatan, el más cercano a su hora. Ahí empieza y hace lo de abajo;
-    luego, máquinas de arriba; y al final la bici de spinning, si no hay clase con gente en ese rato."""
+    luego, máquinas de arriba; y al final, solo los días de HIIT, la bici de spinning (5-nov-2026, Iago: «hoy me
+    toca jalón… no tiene sentido que me digas lo de la bici»)."""
     minimo = _min(aj.get("abajo minimo", "0:30"))
     ocupado = sorted((max(f["ini"], l_ini), min(f["fin"], l_fin)) for f in abajo if _solapa(f, l_ini, l_fin))
     huecos, t = [], l_ini
@@ -294,6 +295,9 @@ def _plan_partido(abajo, spin, l_ini, l_fin, p_ini, aj):
     if not huecos:
         return ""
     ini, fin = max(huecos, key=lambda h: (h[1] - h[0], -abs(h[0] - p_ini)))
+    if not hiit:
+        return (f"Lo mejor: ve a las {_hh(ini)}, haz lo de abajo hasta las {_hh(fin)} y luego lo que te quede "
+                f"en las máquinas de arriba.")
     s_ini, s_fin = _tramo(aj.get("mi sesion entera", "10:30-12:00"))
     final = ini + (s_fin - s_ini)                                 # cuándo acabaría la sesión entera
     b_ini = final - _min(aj.get("bici al final", "0:25"))

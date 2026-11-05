@@ -84,7 +84,7 @@
   (un entrenamiento personal de 1 ya cuenta), solo dentro de «libre del todo entre» (/Gimnasio.txt; él: de 10 a 12).
   Si no la hay: «hoy no hay una hora libre del todo…, porque hay X» y, desde el 3-nov-2026 (lo pidió Iago), plan partido
   (`gimnasio._plan_partido`): empezar en el hueco más largo con abajo libre (≥ «abajo mínimo», 0:30), lo de abajo ahí, luego
-  máquinas de arriba y al final la bici (dice si estará libre). Solo sin ese hueco: «mira las franjas y decide tú».
+  máquinas de arriba y, SOLO los días de HIIT, al final la bici (dice si estará libre; el 5-nov, día de jalón, Iago pidió no mencionarla). Solo sin ese hueco: «mira las franjas y decide tú».
   En el correo, la hora recomendada va en **negrita** (solo en PARA_CORREO; la app y el pódcast, sin asteriscos).
   Los días de HIIT, ese hueco ideal también exige la bici de spinning libre al final. Fuera de eso, el spinning
   no cuenta para abajo. Desde el 30-oct la franja principal dura 1 h todos los días (el entreno entero abajo libre).
