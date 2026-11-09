@@ -567,6 +567,15 @@ def pagina():
         nav.close()
     lineas.append(f"errores de consola ({len(errores)}): " + " | ".join(errores[:12]))
     lineas.append(f"peticiones fallidas ({len(fallos)}): " + " | ".join(fallos[:12]))
+    import requests
+    for sitio in ("noticiarioiago", "diariodeiagocmus", "ritmoelemental", "dictadoselemental", "fichasteoria",
+                  "accesogp", "rutinaentreno"):
+        try:
+            rr = requests.get(f"https://{sitio}.netlify.app/", timeout=20)
+            pausado = "paused" in rr.text[:3000] and "usage limits" in rr.text[:3000]
+            lineas.append(f"{sitio}: HTTP {rr.status_code}{' · PAUSADO por límite de uso' if pausado else ''}")
+        except Exception as e:
+            lineas.append(f"{sitio}: {type(e).__name__}")
     nota("Página del noticiario", "\n".join(lineas)[:3800])
 
 
