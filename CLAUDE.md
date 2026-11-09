@@ -60,7 +60,8 @@
   «Ferrer1430» → «Ferrer 14:30» (`agenda._horas`; así los escribe él en el calendario), y la voz dice toda
   hora «13:30» con números, tal cual: «trece treinta», «catorce en punto» (`pronuncia.para_voz`), para no
   dudar de qué hora es. Las horas de los eventos siguen «a las nueve de la noche». Ver los títulos tal cual
-  y cómo se leen: diagnóstico `agenda_caracteres` (a Dropbox /Pruebas, privado).
+  y cómo se leen: diagnóstico `agenda_caracteres` (a Dropbox /Pruebas, privado). Qué calendarios lee (nombre de
+  cada dirección del secreto CALENDARIOS_ICS y sus eventos de hoy): diagnóstico `calendarios` (9-nov-2026: los 4 de Iago).
 - Depor en Riazor (28-oct-2026): esos eventos del calendario (los apunta la tarea de los lunes) solo se dicen
   el mismo día, no en «Y mañana…» (`agenda.SOLO_EL_DIA`); a Iago solo le importan ese día, para aparcar: ese día
   se añade «Ojo con el coche: mejor no moverlo entre X y Y» (de 1 h 30 antes a 2 h 30 después; `agenda._aviso_aparcar`,
