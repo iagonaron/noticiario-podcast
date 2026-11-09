@@ -541,6 +541,35 @@ def agenda_caracteres():
     nota("Agenda", f"{len(filas)} títulos, {raros} con caracteres raros · problemas: {len(problemas)}")
 
 
+def pagina():
+    """Qué pasa al abrir el noticiario web: título, adónde lleva, si existe STATE y qué tiene, errores de la
+    consola y peticiones fallidas. Sin cupo; no espera a que esté «listo» (eso es lo que falla)."""
+    from playwright.sync_api import sync_playwright
+    from . import config
+    lineas, errores, fallos = [], [], []
+    with sync_playwright() as p:
+        nav = p.chromium.launch()
+        pag = nav.new_page()
+        pag.on("console", lambda m: errores.append(f"{m.type}: {m.text[:200]}") if m.type in ("error", "warning") else None)
+        pag.on("pageerror", lambda e: errores.append(f"excepción: {str(e)[:300]}"))
+        pag.on("requestfailed", lambda r: fallos.append(f"{r.url[:120]} · {r.failure}"))
+        r = pag.goto(config.NOTICIARIO_URL, wait_until="domcontentloaded", timeout=90_000)
+        lineas.append(f"HTTP {r.status if r else '?'} · url final {pag.url[:100]} · título «{pag.title()[:80]}»")
+        for seg in (10, 30, 60, 90):
+            pag.wait_for_timeout((seg - (0 if seg == 10 else [10, 30, 60][[30, 60, 90].index(seg)])) * 1000)
+            info = pag.evaluate("""() => ({
+                state: typeof STATE, claves: (typeof STATE !== 'undefined' && STATE) ? Object.keys(STATE).slice(0, 20) : [],
+                cards: (typeof STATE !== 'undefined' && STATE && STATE.cards) ? Object.keys(STATE.cards).length : null,
+                globales: Object.keys(window).filter(k => /state|card|noticia|datos|app/i.test(k)).slice(0, 15),
+                texto: (document.body ? document.body.innerText : '').slice(0, 300)})""")
+            lineas.append(f"a los {seg}s: STATE {info['state']} · claves {info['claves']} · cards {info['cards']} · "
+                          f"globales {info['globales']} · texto «{info['texto'][:200]!s}»".replace("\n", " / "))
+        nav.close()
+    lineas.append(f"errores de consola ({len(errores)}): " + " | ".join(errores[:12]))
+    lineas.append(f"peticiones fallidas ({len(fallos)}): " + " | ".join(fallos[:12]))
+    nota("Página del noticiario", "\n".join(lineas)[:3800])
+
+
 def _parecido(a, b):
     import difflib
     return difflib.SequenceMatcher(None, a, b).ratio() if a and b else 0.0
@@ -817,6 +846,6 @@ if __name__ == "__main__":
              "fuentes_galicia": fuentes_galicia, "galicia": galicia, "pronuncia": pronuncia,
              "fricativas": fricativas, "pausas": pausas,
              "historia": historia, "tiempo": tiempo, "planes_tiempos": planes_tiempos,
-             "agenda_caracteres": agenda_caracteres, "gimnasio": gimnasio}[prueba]()
+             "agenda_caracteres": agenda_caracteres, "pagina": pagina, "gimnasio": gimnasio}[prueba]()
         except Exception as e:
             nota(f"Diagnóstico {prueba}", traceback.format_exc()[-1500:], "warning")
