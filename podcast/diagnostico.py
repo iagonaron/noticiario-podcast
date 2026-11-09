@@ -525,6 +525,28 @@ def planes_tiempos():
     nota("Tiempos del plan", "\n".join(f"{k}: {v}" for k, v in res.items()))
 
 
+def calendarios():
+    """Qué calendarios lee el pódcast (nombre de cada dirección iCal del secreto) y cuántos eventos dan hoy y
+    mañana, a Dropbox /Pruebas/Calendarios.txt (privado). Aquí solo cuántos. Sin cupo."""
+    import datetime as dt
+    import icalendar
+    from . import agenda, dropbox, util
+    hoy = util.ahora().date()
+    filas = []
+    for n, url in enumerate(agenda._urls(), 1):
+        try:
+            cal = icalendar.Calendar.from_ical(util.descargar(url, como="bytes", timeout=30, etiqueta=f"el calendario {n}"))
+            nombre = str(cal.get("X-WR-CALNAME", "") or "(sin nombre)")
+            de_hoy = agenda._eventos_del_dia(cal, hoy)
+            de_manana = agenda._eventos_del_dia(cal, hoy + dt.timedelta(days=1))
+            filas.append(f"{n}. {nombre} · hoy {len(de_hoy)}: {', '.join(e['titulo'] for e in de_hoy)} · "
+                         f"mañana {len(de_manana)}")
+        except Exception as e:
+            filas.append(f"{n}. no se pudo leer ({type(e).__name__})")
+    dropbox.subir(dropbox.token_acceso(), "/Pruebas/Calendarios.txt", "\n".join(filas).encode("utf-8"))
+    nota("Calendarios", f"{len(filas)} calendarios configurados (nombres en Dropbox /Pruebas/Calendarios.txt)")
+
+
 def agenda_caracteres():
     """Los títulos de la agenda de hoy y mañana con los caracteres raros a la vista (U+XXXX), a Dropbox
     /Pruebas/Agenda - caracteres.txt (privado). Aquí solo cuántos hay. Sin cupo."""
@@ -857,6 +879,6 @@ if __name__ == "__main__":
              "fuentes_galicia": fuentes_galicia, "galicia": galicia, "pronuncia": pronuncia,
              "fricativas": fricativas, "pausas": pausas,
              "historia": historia, "tiempo": tiempo, "planes_tiempos": planes_tiempos,
-             "agenda_caracteres": agenda_caracteres, "pagina": pagina, "gimnasio": gimnasio}[prueba]()
+             "agenda_caracteres": agenda_caracteres, "calendarios": calendarios, "pagina": pagina, "gimnasio": gimnasio}[prueba]()
         except Exception as e:
             nota(f"Diagnóstico {prueba}", traceback.format_exc()[-1500:], "warning")
