@@ -300,10 +300,36 @@ def galicia(maximo=3, minimo_medios=3, horas=24):
     return salida[:maximo]
 
 
-def recoger(espera_max=300, js=None):
+def noticiario_vivo(timeout=25):
+    """(html, motivo): el HTML del noticiario web si Netlify lo sirve bien; si no, (None, por qué).
+    El 9-nov-2026 Netlify pausó la cuenta por límite de uso («Site not available», 503) y el robot
+    esperó 3 × 5 minutos a una página que no iba a cargar."""
+    import urllib.error
+    import urllib.request
+    req = urllib.request.Request(config.NOTICIARIO_URL, headers={"User-Agent": util.UA})
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            html = r.read().decode("utf-8", "replace")
+        if "STATE" in html and len(html) > 20000:
+            return html, "ok"
+        return None, f"respuesta rara ({len(html)} bytes)"
+    except urllib.error.HTTPError as e:
+        cuerpo = e.read()[:4000].decode("utf-8", "replace")
+        return None, f"HTTP {e.code}" + (" · Netlify lo ha pausado por límite de uso" if "usage limits" in cuerpo else "")
+    except Exception as e:
+        return None, f"{type(e).__name__}: {str(e)[:80]}"
+
+
+def recoger(espera_max=300, js=None, respaldo=None):
     """Devuelve el diccionario con las noticias del día tal y como las ha elegido el noticiario.
-    Con «js», evalúa ese código en la página y devuelve su resultado tal cual (diagnóstico)."""
+    Con «js», evalúa ese código en la página y devuelve su resultado tal cual (diagnóstico).
+    Con «respaldo» (el HTML del noticiario guardado en Dropbox), si el noticiario web no responde se
+    abre esa copia en la misma dirección: elige las noticias igual, sin depender de Netlify."""
     from playwright.sync_api import sync_playwright
+    vivo, motivo = noticiario_vivo()
+    if not vivo and not respaldo:
+        raise RuntimeError(f"el noticiario web no responde ({motivo}) y no hay copia de respaldo")
+    origen = config.NOTICIARIO_URL.rstrip("/")
 
     estadistica = {"directas": 0, "por_proxy": 0}
     elpais = {"html": None}
@@ -329,7 +355,16 @@ def recoger(espera_max=300, js=None):
         except Exception:
             pass
         estadistica["por_proxy"] += 1
+        if not vivo:                                    # el proxy de Netlify tampoco está
+            return route.fulfill(status=502, body="")
         return route.continue_()
+
+    def copia(route, request):
+        """Sin Netlify: la página es la copia de respaldo y lo demás de ese sitio no existe."""
+        ruta = request.url[len(origen):].split("?")[0]
+        if ruta in ("", "/", "/index.html"):
+            return route.fulfill(status=200, body=respaldo, headers={"content-type": "text/html; charset=utf-8"})
+        return route.fulfill(status=404, body="")
 
     with sync_playwright() as p:
         nav = p.chromium.launch(headless=True)
@@ -339,6 +374,9 @@ def recoger(espera_max=300, js=None):
             elpais["html"], estadistica["elpais"] = _elpais_antes(ctx)
             util.log(f"El País Exprés: {estadistica['elpais']}")
             ctx.route("**/proxy/**", atajo)
+            if not vivo:
+                util.log(f"Noticiario web: {motivo}. Uso la copia de respaldo de Dropbox")
+                ctx.route(lambda u: u.startswith(origen) and "/proxy/" not in u, copia)
             pagina = ctx.new_page()
             t0 = time.time()
             pagina.goto(config.NOTICIARIO_URL, wait_until="domcontentloaded", timeout=90_000)
@@ -350,6 +388,8 @@ def recoger(espera_max=300, js=None):
             nav.close()
     if js:
         return datos
-    datos["carga"] = {"segundos": round(segundos), **estadistica}
+    datos["carga"] = {"segundos": round(segundos), **estadistica,
+                      "noticiario": "web" if vivo else f"copia de respaldo ({motivo})"}
+    datos["_html_vivo"] = vivo
     _madrid(datos)
     return _depurar(datos)

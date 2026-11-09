@@ -34,13 +34,31 @@ def resumen_github(lineas):
             f.write("\n".join(lineas) + "\n")
 
 
-def recoger_noticias(hoy, diag):
+def recoger_noticias(hoy, diag, token=None):
     """Noticias del noticiario. Si la Portada sale vacía, se reintenta enseguida; si sale de ayer
-    (El País aún no ha publicado la de hoy) y es por la mañana temprano, se espera unos minutos."""
+    (El País aún no ha publicado la de hoy) y es por la mañana temprano, se espera unos minutos.
+    Si el noticiario web no responde (9-nov-2026: Netlify pausó la cuenta), se abre la copia guardada
+    en Dropbox; cada día que la web va bien, esa copia se renueva."""
     datos, avisos = None, []
+    respaldo = None
+    if token:
+        try:
+            b = dropbox.descargar(token, config.DROPBOX_NOTICIARIO)
+            respaldo = b.decode("utf-8", "replace") if b else None
+        except Exception as e:
+            avisos.append(f"Copia del noticiario: no se pudo leer ({type(e).__name__})")
     for intento in range(3):
         try:
-            d = noticias.recoger()
+            d = noticias.recoger(respaldo=respaldo)
+            vivo = d.pop("_html_vivo", None)
+            if vivo and token and vivo != respaldo:
+                try:
+                    dropbox.subir(token, config.DROPBOX_NOTICIARIO, vivo.encode("utf-8"))
+                    respaldo = vivo
+                except Exception as e:
+                    avisos.append(f"Copia del noticiario: no se pudo guardar ({type(e).__name__})")
+            if not vivo:
+                avisos.append(f"El noticiario web no respondía: {d.get('carga', {}).get('noticiario')}")
             diag.append(f"Noticiario (intento {intento + 1}): {d.get('carga')} · portada {len(d['portada'])}, "
                         f"interés {len(d['interes'])}, local {len(d['local'])}")
             if datos is None or len(d["portada"]) >= len(datos["portada"]):
@@ -181,7 +199,7 @@ def main():
 
     # 1) noticias
     etapa("noticias")
-    datos, av = recoger_noticias(hoy, diag)
+    datos, av = recoger_noticias(hoy, diag, token)
     if token:
         try:
             subir_candidatas(token, datos)

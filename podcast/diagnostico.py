@@ -44,9 +44,11 @@ def elpais():
 
 
 def noticias():
-    from . import noticias as nt
+    from . import noticias as nt, dropbox, config
+    b = dropbox.descargar(dropbox.token_acceso(), config.DROPBOX_NOTICIARIO)
     t0 = time.time()
-    d = nt.recoger()
+    d = nt.recoger(respaldo=b.decode("utf-8", "replace") if b else None)
+    d.pop("_html_vivo", None)
     nota("Noticiario", f"{time.time() - t0:.0f}s · carga={d.get('carga')} · portada {len(d['portada'])} · "
                        f"interés {len(d['interes'])} · local {len(d['local'])} · alertas {len(d['alertas_sanitarias'])} · "
                        f"madrid={d.get('madrid')} · claves={d.get('madrid_claves')} · fecha de={d.get('madrid_fecha_clave')}")
