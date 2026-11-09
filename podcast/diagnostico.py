@@ -575,9 +575,9 @@ def pagina():
         try:
             rr = requests.get(f"https://{sitio}.netlify.app/", timeout=20)
             pausado = "paused" in rr.text[:3000] and "usage limits" in rr.text[:3000]
-            lineas.append(f"{sitio}: HTTP {rr.status_code}{' · PAUSADO por límite de uso' if pausado else ''}")
+            lineas.insert(0, f"{sitio}: HTTP {rr.status_code}{' · PAUSADO por límite de uso' if pausado else ''}")
         except Exception as e:
-            lineas.append(f"{sitio}: {type(e).__name__}")
+            lineas.insert(0, f"{sitio}: {type(e).__name__}")
     nota("Página del noticiario", "\n".join(lineas)[:3800])
 
 
