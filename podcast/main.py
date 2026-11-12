@@ -109,6 +109,13 @@ def lo_rapido(textos, primera_voz):
     return segs
 
 
+def recordatorio_del_dia(texto, hoy):
+    """Una frase de «Recordatorio diario.txt» (una por línea; las que empiezan por # no cuentan), rotando por días
+    para que no suene siempre igual. Vacío si no hay frases."""
+    frases = [l.strip() for l in texto.splitlines() if l.strip() and not l.lstrip().startswith("#")]
+    return frases[hoy.toordinal() % len(frases)] if frases else ""
+
+
 def plan_del_dia(token, hoy, diag, limite=None):
     """Momento Distinto Básico: criterios e historial desde Dropbox y propuesta de Gemini."""
     if not token:
@@ -237,6 +244,14 @@ def main():
         except Exception as e:
             avisos.append(f"Gimnasio: {type(e).__name__}: {str(e)[:200]}")
 
+    texto_recordatorio = ""
+    if token:
+        try:
+            r = dropbox.descargar(token, config.DROPBOX_RECORDATORIO)
+            texto_recordatorio = recordatorio_del_dia(r.decode("utf-8-sig", "replace"), hoy) if r else ""
+        except Exception as e:
+            avisos.append(f"Recordatorio diario: no se pudo leer ({type(e).__name__})")
+
     texto_dias = ""
     if token:
         try:
@@ -256,7 +271,7 @@ def main():
     etapa("guion")
     segs_ia, info = guion.escribir(ahora, datos)
     avisos += info.get("avisos", [])
-    inicio = guion.apertura(ahora) + lo_rapido([texto_dias, texto_agenda, texto_gym, texto_tiempo], "B")
+    inicio = guion.apertura(ahora) + lo_rapido([texto_recordatorio, texto_dias, texto_agenda, texto_gym, texto_tiempo], "B")
     segs = inicio + segs_ia
 
     etapa("Distinto Básico")

@@ -112,6 +112,7 @@ DROPBOX_PLANES_HISTORIAL = "/Distinto Básico - propuestas.txt"  # lo ya propues
 DROPBOX_PLANES_GUARDADOS = "/Distinto Básico - propuestas.json"  # lo mismo entero, para recordarlo otro día
 DROPBOX_GIMNASIO_HOY = "/Gimnasio hoy.md"   # frase + tabla del gimnasio de hoy (la lee el correo de las 7:42)
 DROPBOX_NOTICIARIO = "/noticiario/index.html"   # copia del noticiario web por si Netlify no lo sirve (se renueva sola)
+DROPBOX_RECORDATORIO = "/Recordatorio diario.txt"   # frase(s) que se dicen cada día tras la fecha (solo en Dropbox)
 DROPBOX_CUMPLES = "/Cumpleaños.txt"   # la lista de cumpleaños vive SOLO aquí (el repositorio es público)
 DROPBOX_MUSICA = "/musica"   # intro / transicion / cierre (.mp3 o .wav); si no hay, va sin música
 DROPBOX_DIAGNOSTICO = _PREFIJO + "/Diagnóstico.txt"   # datos técnicos de la última ejecución
