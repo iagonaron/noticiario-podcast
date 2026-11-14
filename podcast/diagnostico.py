@@ -523,6 +523,21 @@ def planes_tiempos():
     nota("Tiempos del plan", "\n".join(f"{k}: {v}" for k, v in res.items()))
 
 
+def anadir_criterio():
+    """Añade el texto de TEXTO (una línea) al final de Dropbox «Distinto Básico - añadidos.txt» (el conector de
+    Dropbox de Claude no puede sobrescribir ficheros). Sin cupo."""
+    from . import config, dropbox
+    texto = (os.environ.get("TEXTO") or "").strip()
+    if not texto:
+        nota("Añadir criterio", "TEXTO vacío: no se ha cambiado nada", "warning")
+        return
+    token = dropbox.token_acceso()
+    antes = dropbox.descargar(token, config.DROPBOX_PLANES_ANADIDOS)
+    actual = antes.decode("utf-8-sig", "replace").rstrip("\n") if antes else ""
+    dropbox.subir(token, config.DROPBOX_PLANES_ANADIDOS, (actual + "\n" + texto + "\n").lstrip("\n").encode("utf-8"))
+    nota("Añadir criterio", f"añadida 1 línea ({len(texto)} caracteres) · el fichero tenía {len(actual)} caracteres")
+
+
 def calendarios():
     """Qué calendarios lee el pódcast (nombre de cada dirección iCal del secreto) y cuántos eventos dan hoy y
     mañana, a Dropbox /Pruebas/Calendarios.txt (privado). Aquí solo cuántos. Sin cupo."""
@@ -877,6 +892,6 @@ if __name__ == "__main__":
              "fuentes_galicia": fuentes_galicia, "galicia": galicia, "pronuncia": pronuncia,
              "fricativas": fricativas, "pausas": pausas,
              "historia": historia, "tiempo": tiempo, "planes_tiempos": planes_tiempos,
-             "agenda_caracteres": agenda_caracteres, "calendarios": calendarios, "pagina": pagina, "gimnasio": gimnasio}[prueba]()
+             "agenda_caracteres": agenda_caracteres, "calendarios": calendarios, "anadir_criterio": anadir_criterio, "pagina": pagina, "gimnasio": gimnasio}[prueba]()
         except Exception as e:
             nota(f"Diagnóstico {prueba}", traceback.format_exc()[-1500:], "warning")
