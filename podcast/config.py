@@ -108,6 +108,7 @@ _PREFIJO = "/Pruebas" if PRUEBA else ""
 DROPBOX_MP3 = _PREFIJO + "/Noticiario de hoy.mp3"
 DROPBOX_GUION = _PREFIJO + "/Guion de hoy.md"
 DROPBOX_PLANES_CRITERIOS = "/Distinto Básico.txt"              # criterios de Iago (solo en Dropbox)
+DROPBOX_PLANES_ANADIDOS = "/Distinto Básico - añadidos.txt"   # más gustos de Iago, se suman a los criterios (opcional)
 DROPBOX_PLANES_HISTORIAL = "/Distinto Básico - propuestas.txt"  # lo ya propuesto, para no repetir
 DROPBOX_PLANES_GUARDADOS = "/Distinto Básico - propuestas.json"  # lo mismo entero, para recordarlo otro día
 DROPBOX_GIMNASIO_HOY = "/Gimnasio hoy.md"   # frase + tabla del gimnasio de hoy (la lee el correo de las 7:42)

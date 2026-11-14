@@ -55,6 +55,9 @@
   ninguna agenda (3-flash-preview lo hacía). Si no hay plan nuevo, se recuerda uno de otro día que siga en pie
   (`planes.recordatorio`, desde /Distinto Básico - propuestas.json). Diagnósticos: `planes`, `planes_tiempos`
   (`modelos_texto`), `historia` (Diagnóstico y guion de otro día, desde el historial de Dropbox; `fecha`).
+- Monólogos (14-nov-2026, lo pidió Iago): el Distinto Básico también busca humor/monólogos en Coruña (agenda de
+  taquilla.com además de planomato). Sus gustos van en Dropbox /Distinto Básico - añadidos.txt, que `planes.leer_criterios`
+  suma a /Distinto Básico.txt (el conector de Dropbox no puede sobrescribir: lo nuevo, mejor en «añadidos»).
 - Recordatorio diario (12-nov-2026, lo pidió Iago): justo después de «Hoy es…», la voz B dice una frase de Dropbox
   /Recordatorio diario.txt (una por línea, # = comentario; rota por días; `main.recordatorio_del_dia`). El texto vive
   SOLO en Dropbox (es personal); si el fichero no está o no tiene frases, no se dice nada.

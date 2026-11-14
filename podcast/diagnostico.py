@@ -128,8 +128,7 @@ def planes():
     """Momento Distinto Básico de prueba: la propuesta va a Dropbox (/Pruebas), aquí solo datos técnicos."""
     from . import planes as pl, dropbox, config, util
     token = dropbox.token_acceso()
-    crit = dropbox.descargar(token, config.DROPBOX_PLANES_CRITERIOS)
-    criterios = (crit.decode("utf-8-sig", "replace") if crit else
+    criterios = (pl.leer_criterios(token) or
                  "Planes culturales o de calle en A Coruña para una pareja, de unas tres horas, y comida en un sitio vegano cerca.")
     hist = dropbox.descargar(token, config.DROPBOX_PLANES_HISTORIAL)
     historial = [l for l in (hist.decode("utf-8-sig", "replace").splitlines() if hist else []) if l.strip()]
@@ -140,7 +139,7 @@ def planes():
         dropbox.subir(token, "/Pruebas/plan de prueba.json", json.dumps(plan, ensure_ascii=False, indent=1).encode("utf-8-sig"))
     nota("Distinto Básico", f"{time.time() - t0:.0f}s · {'propuesta OK en ' + str(plan.get('segundos')) + ' s' if plan else 'sin propuesta'} · "
                             f"modelo {plan.get('modelo') if plan else '-'} · fuentes {len(plan.get('fuentes', [])) if plan else 0} · "
-                            f"criterios {'de Dropbox' if crit else 'genéricos'} · páginas: {plan.get('lectura') if plan else '-'} · "
+                            f"criterios de Dropbox · páginas: {plan.get('lectura') if plan else '-'} · "
                             f"fecha propuesta {plan.get('dia') if plan else '-'} · avisos: {avisos}"[:3000])
 
 
@@ -468,8 +467,7 @@ def planes_tiempos():
     import requests
     from . import planes as pl, dropbox, config, util
     token = dropbox.token_acceso()
-    crit = dropbox.descargar(token, config.DROPBOX_PLANES_CRITERIOS)
-    criterios = crit.decode("utf-8-sig", "replace") if crit else "Planes culturales en A Coruña."
+    criterios = pl.leer_criterios(token) or "Planes culturales en A Coruña."
     hist = dropbox.descargar(token, config.DROPBOX_PLANES_HISTORIAL)
     historial = [l for l in (hist.decode("utf-8-sig", "replace").splitlines() if hist else []) if l.strip()]
     hoy = util.ahora().date()

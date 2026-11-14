@@ -120,12 +120,12 @@ def plan_del_dia(token, hoy, diag, limite=None):
     """Momento Distinto Básico: criterios e historial desde Dropbox y propuesta de Gemini."""
     if not token:
         return None, [], ["Distinto Básico: sin Dropbox no hay criterios"]
-    crit = dropbox.descargar(token, config.DROPBOX_PLANES_CRITERIOS)
-    if not crit:
+    criterios = planes.leer_criterios(token)
+    if not criterios:
         return None, [], [f"Distinto Básico: no está {config.DROPBOX_PLANES_CRITERIOS} en la carpeta del pódcast"]
     hist = dropbox.descargar(token, config.DROPBOX_PLANES_HISTORIAL)
     historial = [l for l in (hist.decode("utf-8-sig", "replace").splitlines() if hist else []) if l.strip()]
-    plan, avisos = planes.proponer(hoy, crit.decode("utf-8-sig", "replace"), historial, limite)
+    plan, avisos = planes.proponer(hoy, criterios, historial, limite)
     diag.append(f"Distinto Básico: {'propuesta de ' + plan.get('modelo', '?') if plan else 'sin propuesta'} · "
                 f"{len(historial)} propuestas anteriores")
     return plan, historial, avisos

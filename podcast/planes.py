@@ -33,9 +33,23 @@ MESES_URL = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "ag
              "octubre", "noviembre", "diciembre"]
 
 
+def leer_criterios(token):
+    """Los criterios de Iago (Dropbox «Distinto Básico.txt») más, si existe, «Distinto Básico - añadidos.txt».
+    None si no está el principal."""
+    from . import config, dropbox
+    crit = dropbox.descargar(token, config.DROPBOX_PLANES_CRITERIOS)
+    if not crit:
+        return None
+    texto = crit.decode("utf-8-sig", "replace")
+    extra = dropbox.descargar(token, config.DROPBOX_PLANES_ANADIDOS)
+    if extra:
+        texto += "\n\n" + extra.decode("utf-8-sig", "replace")
+    return texto
+
+
 def fuentes_del_dia(hoy):
     """Agendas que se le dan a leer: la del Concello, la de Quincemil de varios días (rotando),
-    los conciertos del mes y un agregador de planes."""
+    los conciertos del mes, un agregador de planes y los monólogos de Coruña."""
     urls = ["https://www.coruna.gal/cultura/es/agenda/proximos-eventos",
             f"https://www.elespanol.com/quincemil/servicios/agenda/dia/{hoy.day}-{hoy.month}-{hoy.year}"]
     meses = {hoy.month: hoy.year}
@@ -44,6 +58,7 @@ def fuentes_del_dia(hoy):
     for mes, anio in meses.items():
         urls.append(f"https://www.laganzua.net/conciertos/coruna/{MESES_URL[mes - 1]}-{anio}")
     urls.append("https://planomato.com/es/a-coruna")
+    urls.append("https://www.taquilla.com/espectaculos/humor-monologos/a-coruna")   # monólogos (14-nov-2026)
     return urls
 
 
