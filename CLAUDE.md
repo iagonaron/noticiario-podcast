@@ -58,6 +58,7 @@
 - Monólogos (14-nov-2026, lo pidió Iago): el Distinto Básico también busca humor/monólogos en Coruña (agenda de
   taquilla.com además de planomato). Sus gustos van en Dropbox /Distinto Básico - añadidos.txt, que `planes.leer_criterios`
   suma a /Distinto Básico.txt (el conector de Dropbox no puede sobrescribir: lo nuevo, mejor en «añadidos»).
+  Para añadir una línea sin tocar el fichero a mano: Diagnóstico `anadir_criterio` con `texto` (sin cupo; el texto sale en el registro público).
 - Recordatorio diario (12-nov-2026, lo pidió Iago): justo después de «Hoy es…», la voz B dice una frase de Dropbox
   /Recordatorio diario.txt (una por línea, # = comentario; rota por días; `main.recordatorio_del_dia`). El texto vive
   SOLO en Dropbox (es personal); si el fichero no está o no tiene frases, no se dice nada.
